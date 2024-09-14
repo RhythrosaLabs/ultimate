@@ -13,3 +13,4 @@ gtts
 midiutil
 python-dotenv
 librosa
+soundfile
