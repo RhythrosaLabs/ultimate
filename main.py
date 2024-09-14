@@ -1,191 +1,151 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
-import requests
-import json
-import base64
-from io import BytesIO
-from PIL import Image
-import zipfile
-import os
-import replicate
-import time
+from scipy.io.wavfile import write
+from scipy.signal import butter, lfilter
+import matplotlib.pyplot as plt
+import io
 
-# Import custom modules (ensure these files are present in your directory)
-try:
-    from helpers import (
-        get_api_keys, add_file_to_global_storage, generate_content, 
-        generate_budget_spreadsheet, generate_social_media_schedule,
-        generate_images, create_master_document, create_zip,
-        enhance_content, add_to_chat_knowledge_base, create_gif,
-        generate_audio_logo, generate_video_logo, animate_image_to_video,
-        fetch_generated_video, generate_file_with_gpt
-    )
-except ModuleNotFoundError as e:
-    st.error(f"Error importing helpers: {e}")
-    
-try:
-    from image_tools import (
-        mirror_image, invert_colors, pixelate_image, remove_background,
-        greyscale_image, enhance_saturation, sepia_tone, blur_image,
-        emboss_image, solarize_image, posterize_image, sharpen_image,
-        apply_vhs_glitch_effect, apply_oil_painting_effect, flip_vertically,
-        edge_detection, vignette, vintage_filter, thermal_vision,
-        brighten_image, darken_image, rotate_left, rotate_right,
-        dreamy_effect, glitch_art, pop_culture_filter, watercolor
-    )
-except ModuleNotFoundError as e:
-    st.error(f"Error importing image_tools: {e}")
+# Set page configuration
+st.set_page_config(
+    page_title="Industrial Noise Generator",
+    page_icon="🔊",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
 
-# Set up the page
-st.set_page_config(page_title="AI-Powered Creative Suite", layout="wide")
+# Custom CSS to enhance appearance
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f0f2f6;
+    }
+    .stButton>button {
+        width: 100%;
+        padding: 10px;
+        background-color: #FF4B4B;
+        color: white;
+        border-radius: 10px;
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: #ff3333;
+    }
+    .stDownloadButton>button {
+        width: 100%;
+        padding: 10px;
+        background-color: #00cc66;
+        color: white;
+        border-radius: 10px;
+        border: none;
+    }
+    .stDownloadButton>button:hover {
+        background-color: #00994d;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'api_keys' not in st.session_state:
-    st.session_state.api_keys = {}
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
-if 'global_file_storage' not in st.session_state:
-    st.session_state.global_file_storage = {}
+# Title and description
+st.title("🔊 Industrial Noise Generator")
+st.markdown("""
+Generate industrial noise samples at **48kHz mono**. Customize parameters to create unique sounds.
 
-# Sidebar for API key input
-with st.sidebar:
-    st.title("API Key Setup")
-    openai_key = st.text_input("OpenAI API Key", type="password")
-    replicate_key = st.text_input("Replicate API Key", type="password")
-    stability_key = st.text_input("Stability AI API Key", type="password")
-    clipdrop_key = st.text_input("ClipDrop API Key", type="password")
-    
-    if st.button("Save API Keys"):
-        st.session_state.api_keys = {
-            "openai": openai_key,
-            "replicate": replicate_key,
-            "stability": stability_key,
-            "clipdrop": clipdrop_key
-        }
-        st.success("API keys saved successfully!")
+""")
 
-# Tabs for different functionality
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "File Management", "Image Editor", "Marketing Campaign Generator", 
-    "Smart Notes", "Chat Assistant", "Custom Workflows"
-])
+# Sidebar for parameters
+st.sidebar.header("🎛️ Controls")
 
-# Tab 1: File Management
-with tab1:
-    st.header("File Management")
-    uploaded_file = st.file_uploader("Upload a file", type=['txt', 'pdf', 'png', 'jpg', 'jpeg', 'csv', 'xlsx'])
-    if uploaded_file:
-        file_details = {"FileName": uploaded_file.name, "FileType": uploaded_file.type, "FileSize": uploaded_file.size}
-        st.write(file_details)
-        file_contents = uploaded_file.read()
-        try:
-            add_file_to_global_storage(uploaded_file.name, file_contents)
-            st.success(f"File {uploaded_file.name} uploaded and stored.")
-        except Exception as e:
-            st.error(f"Failed to upload file: {e}")
-    
-    if st.button("View Stored Files"):
-        for filename, content in st.session_state.global_file_storage.items():
-            st.write(f"- {filename}")
+duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
+noise_type = st.sidebar.selectbox("Noise Type", ["White Noise", "Pink Noise", "Brown Noise"])
+lowcut = st.sidebar.slider("Low Cut Frequency (Hz)", min_value=20, max_value=1000, value=100)
+highcut = st.sidebar.slider("High Cut Frequency (Hz)", min_value=1000, max_value=20000, value=5000)
+order = st.sidebar.slider("Filter Order", min_value=1, max_value=10, value=6)
 
-# Tab 2: Image Editor
-with tab2:
-    st.header("Image Editor")
-    image_file = st.file_uploader("Upload an image", type=['png', 'jpg', 'jpeg'])
-    if image_file:
-        image = Image.open(image_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+# Functions to generate noise
+def generate_white_noise(duration, sample_rate):
+    samples = np.random.normal(0, 1, int(duration * sample_rate))
+    return samples
+
+def generate_pink_noise(duration, sample_rate):
+    samples = int(duration * sample_rate)
+    n_rows = 16
+    n_columns = int(np.ceil(samples / n_rows))
+    array = np.random.randn(n_rows, n_columns)
+    cumulative = np.cumsum(array, axis=0)
+    pink_noise = cumulative[-1, :]
+    pink_noise = pink_noise[:samples]
+    return pink_noise
+
+def generate_brown_noise(duration, sample_rate):
+    samples = int(duration * sample_rate)
+    brown_noise = np.cumsum(np.random.randn(samples))
+    brown_noise = brown_noise / np.max(np.abs(brown_noise))
+    return brown_noise
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    # Create a bandpass filter
+    nyq = 0.5 * fs
+    low = max(lowcut / nyq, 0.001)
+    high = min(highcut / nyq, 0.999)
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+def apply_filter(data, lowcut, highcut, fs, order=5):
+    # Apply the bandpass filter
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
+
+# Main function
+def main():
+    if st.button("🎶 Generate Noise"):
+        sample_rate = 48000
         
-        effect = st.selectbox("Choose an effect", [
-            "Mirror", "Invert Colors", "Pixelate", "Greyscale", "Enhance Saturation",
-            "Sepia", "Blur", "Emboss", "Solarize", "Posterize", "Sharpen",
-            "VHS Glitch", "Oil Painting", "Flip Vertically", "Edge Detection",
-            "Vignette", "Vintage", "Thermal Vision", "Brighten", "Darken",
-            "Rotate Left", "Rotate Right", "Dreamy", "Glitch Art", "Pop Culture", "Watercolor"
-        ])
+        # Generate noise based on selection
+        if noise_type == "White Noise":
+            data = generate_white_noise(duration, sample_rate)
+        elif noise_type == "Pink Noise":
+            data = generate_pink_noise(duration, sample_rate)
+        elif noise_type == "Brown Noise":
+            data = generate_brown_noise(duration, sample_rate)
         
-        if st.button("Apply Effect"):
-            try:
-                effect_function = globals()[effect.lower().replace(" ", "_") + "_image"]
-                edited_image = effect_function(image)
-                st.image(edited_image, caption="Edited Image", use_column_width=True)
-            except Exception as e:
-                st.error(f"Error applying effect: {e}")
+        # Apply filter
+        filtered_data = apply_filter(data, lowcut, highcut, sample_rate, order)
+        
+        # Normalize audio
+        filtered_data = filtered_data / np.max(np.abs(filtered_data))
+        
+        # Save audio to buffer
+        buffer = io.BytesIO()
+        write(buffer, sample_rate, filtered_data.astype(np.float32))
+        buffer.seek(0)
+        
+        # Play audio
+        st.audio(buffer, format='audio/wav')
+        
+        # Provide download button
+        st.download_button(label="💾 Download WAV", data=buffer, file_name="industrial_noise.wav", mime="audio/wav")
+        
+        # Plot waveform
+        st.markdown("#### 📈 Waveform")
+        fig_waveform, ax = plt.subplots()
+        times = np.linspace(0, duration, len(filtered_data))
+        ax.plot(times, filtered_data, color='steelblue')
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Amplitude")
+        ax.grid(True)
+        st.pyplot(fig_waveform)
+        
+        # Plot spectrum
+        st.markdown("#### 📊 Frequency Spectrum")
+        fig_spectrum, ax = plt.subplots()
+        freqs = np.fft.rfftfreq(len(filtered_data), 1/sample_rate)
+        fft_magnitude = np.abs(np.fft.rfft(filtered_data))
+        ax.semilogx(freqs, fft_magnitude, color='darkorange')
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("Magnitude")
+        ax.grid(True)
+        st.pyplot(fig_spectrum)
 
-# Tab 3: Marketing Campaign Generator
-with tab3:
-    st.header("Marketing Campaign Generator")
-    campaign_prompt = st.text_area("Describe your marketing campaign:")
-    budget = st.number_input("Budget ($)", min_value=100, value=1000)
-    
-    if st.button("Generate Campaign"):
-        try:
-            campaign_plan = {}
-            campaign_plan['campaign_concept'] = generate_content("Generate campaign concept", campaign_prompt, str(budget), {}, st.session_state.api_keys['openai'])
-            campaign_plan['marketing_plan'] = generate_content("Generate marketing plan", campaign_prompt, str(budget), {}, st.session_state.api_keys['openai'])
-            campaign_plan['budget_spreadsheet'] = generate_budget_spreadsheet(budget)
-            campaign_plan['social_media_schedule'] = generate_social_media_schedule(campaign_plan['campaign_concept'], {"facebook": True, "twitter": True, "instagram": True})
-            
-            master_document = create_master_document(campaign_plan)
-            zip_data = create_zip(campaign_plan)
-            
-            st.download_button(
-                label="Download Campaign ZIP",
-                data=zip_data.getvalue(),
-                file_name="marketing_campaign.zip",
-                mime="application/zip"
-            )
-        except Exception as e:
-            st.error(f"Error generating campaign: {e}")
-
-# Tab 4: Smart Notes
-with tab4:
-    st.header("Smart Notes")
-    note = st.text_area("Type your notes here...")
-    if st.button("Enhance Notes"):
-        try:
-            enhanced_note = enhance_content(note, "Smart Note")
-            st.write("Enhanced Note:")
-            st.write(enhanced_note)
-        except Exception as e:
-            st.error(f"Error enhancing notes: {e}")
-
-# Tab 5: Chat Assistant
-with tab5:
-    st.header("Chat Assistant")
-    user_message = st.text_input("Ask me anything:")
-    if st.button("Send"):
-        try:
-            response = generate_content("Chat response", user_message, "", {}, st.session_state.api_keys['openai'])
-            st.session_state.chat_history.append({"role": "user", "content": user_message})
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
-        except Exception as e:
-            st.error(f"Error during chat: {e}")
-    
-    st.subheader("Chat History")
-    for message in st.session_state.chat_history:
-        st.write(f"{message['role'].capitalize()}: {message['content']}")
-
-# Tab 6: Custom Workflows
-with tab6:
-    st.header("Custom Workflows")
-    workflow_prompt = st.text_area("Describe your custom workflow:")
-    if st.button("Generate Workflow"):
-        try:
-            workflow_files = generate_file_with_gpt(workflow_prompt)
-            if workflow_files:
-                st.success("Workflow generated successfully!")
-                for filename, content in workflow_files.items():
-                    st.download_button(
-                        label=f"Download {filename}",
-                        data=content,
-                        file_name=filename,
-                        mime="text/plain"
-                    )
-        except Exception as e:
-            st.error(f"Error generating workflow: {e}")
-
-# Footer
-st.markdown("---")
-st.markdown("Created with ❤️ by AI")
+# Run the app
+if __name__ == "__main__":
+    main()
