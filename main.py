@@ -1,15 +1,15 @@
-# Enhanced Industrial Noise Generator Streamlit App with Waveforms, Upload, and Algorithmic Composition
+# Enhanced Industrial Noise Generator Streamlit App with Voice Changing Feature
 
 import streamlit as st
 import numpy as np
-from scipy.io.wavfile import write
+from scipy.io.wavfile import write, read
 from scipy.signal import butter, lfilter
-from scipy import signal
 import matplotlib.pyplot as plt
 import io
 import librosa
 import librosa.display
 import random
+import soundfile as sf
 
 # Set page configuration
 st.set_page_config(
@@ -52,9 +52,9 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Title and description
-st.title("🔊 Industrial Noise Generator Pro")
+st.title("🔊 Industrial Noise Generator Pro with Voice Changer")
 st.markdown("""
-Generate industrial noise samples at **48kHz mono** or customize your sample rate. Customize parameters to create unique sounds.
+Generate industrial noise samples at **48kHz mono** or customize your sample rate. Customize parameters to create unique sounds. Now with a **Voice Changer** feature to pitch-shift your vocals down a perfect fourth!
 """)
 
 # Sidebar for parameters
@@ -89,7 +89,8 @@ def set_preset(preset):
             'modulation': None,
             'uploaded_file': None,
             'algorithmic_composition': False,
-            'composition_type': None
+            'composition_type': None,
+            'voice_changer': False
         }
     elif preset == "Heavy Machinery":
         params = {
@@ -112,7 +113,8 @@ def set_preset(preset):
             'modulation': "Amplitude Modulation",
             'uploaded_file': None,
             'algorithmic_composition': True,
-            'composition_type': "Random Melody"
+            'composition_type': "Random Melody",
+            'voice_changer': False
         }
     elif preset == "Factory Floor":
         params = {
@@ -135,7 +137,8 @@ def set_preset(preset):
             'modulation': None,
             'uploaded_file': None,
             'algorithmic_composition': False,
-            'composition_type': None
+            'composition_type': None,
+            'voice_changer': False
         }
     elif preset == "Electric Hum":
         params = {
@@ -158,7 +161,8 @@ def set_preset(preset):
             'modulation': "Frequency Modulation",
             'uploaded_file': None,
             'algorithmic_composition': False,
-            'composition_type': None
+            'composition_type': None,
+            'voice_changer': False
         }
     else:  # Custom
         params = None
@@ -188,6 +192,7 @@ if preset != "Custom" and preset_params is not None:
     uploaded_file = preset_params['uploaded_file']
     algorithmic_composition = preset_params['algorithmic_composition']
     composition_type = preset_params['composition_type']
+    voice_changer = preset_params['voice_changer']
 else:
     # Custom parameters
     duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
@@ -212,6 +217,12 @@ else:
     modulation = st.sidebar.selectbox("Modulation", [None, "Amplitude Modulation", "Frequency Modulation"])
     st.sidebar.subheader("📁 Upload Audio")
     uploaded_file = st.sidebar.file_uploader("Upload an audio file to include", type=["wav", "mp3"])
+    st.sidebar.subheader("🎤 Voice Changer")
+    voice_changer = st.sidebar.checkbox("Enable Voice Changer (Pitch Shift Down a Fourth)")
+    if voice_changer:
+        voice_file = st.sidebar.file_uploader("Upload your voice recording", type=["wav", "mp3"])
+    else:
+        voice_file = None
     st.sidebar.subheader("🎼 Algorithmic Composition")
     algorithmic_composition = st.sidebar.checkbox("Enable Algorithmic Composition")
     if algorithmic_composition:
@@ -244,6 +255,7 @@ if st.sidebar.button("🔀 Randomize Parameters"):
         composition_type = random.choice(["Random Melody", "Ambient Soundscape", "Rhythmic Pattern"])
     else:
         composition_type = None
+    voice_changer = random.choice([True, False])
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -430,6 +442,10 @@ def generate_algorithmic_composition(duration, sample_rate, composition_type):
     else:
         return np.zeros(int(duration * sample_rate))
 
+def pitch_shift_audio(data, sample_rate, n_steps):
+    # Pitch shift using librosa
+    return librosa.effects.pitch_shift(data, sample_rate, n_steps=n_steps)
+
 # Main function
 def main():
     if st.button("🎶 Generate Noise"):
@@ -494,6 +510,21 @@ def main():
             y = y / np.max(np.abs(y) + 1e-7)  # Normalize
             combined_data += y
 
+        # Voice changer feature
+        if voice_changer and voice_file is not None:
+            voice_bytes = voice_file.read()
+            # Load the voice file
+            y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
+            # Pitch shift down a perfect fourth (5 semitones down)
+            y_shifted = pitch_shift_audio(y, sr, n_steps=-5)
+            # Ensure length matches
+            if len(y_shifted) > len(combined_data):
+                y_shifted = y_shifted[:len(combined_data)]
+            else:
+                y_shifted = np.pad(y_shifted, (0, len(combined_data) - len(y_shifted)), 'constant')
+            y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
+            combined_data += y_shifted
+
         # Include algorithmic composition
         if algorithmic_composition and composition_type is not None:
             data = generate_algorithmic_composition(duration, sample_rate, composition_type)
@@ -539,16 +570,21 @@ def main():
             combined_data = combined_data * max_int
             combined_data = combined_data.astype(dtype)
         elif bit_depth == 24:
-            # 24-bit WAV files are not standard; we'll use 32-bit float as a workaround
-            dtype = np.float32
-            combined_data = combined_data.astype(dtype)
+            # 24-bit WAV files are supported by soundfile library
+            dtype = 'int24'
+            combined_data = combined_data * (2**23 - 1)
+            combined_data = combined_data.astype(np.int32)
         else:  # 32-bit
             dtype = np.float32
             combined_data = combined_data.astype(dtype)
 
         # Save audio to buffer
         buffer = io.BytesIO()
-        write(buffer, sample_rate, combined_data)
+        if bit_depth == 24:
+            # Use soundfile to write 24-bit audio
+            sf.write(buffer, combined_data, sample_rate, subtype='PCM_24')
+        else:
+            write(buffer, sample_rate, combined_data)
         buffer.seek(0)
 
         # Play audio
