@@ -1,5 +1,3 @@
-# Enhanced Industrial Noise Generator Streamlit App
-
 import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write
@@ -59,6 +57,9 @@ Generate industrial noise samples at **48kHz mono** or customize your sample rat
 
 # Sidebar for parameters
 st.sidebar.header("🎛️ Controls")
+
+# Define noise_options here, outside of any conditional blocks
+noise_options = ["White Noise", "Pink Noise", "Brown Noise", "Blue Noise", "Violet Noise", "Grey Noise"]
 
 # Presets
 st.sidebar.subheader("🎚️ Presets")
@@ -171,7 +172,6 @@ if preset != "Custom" and preset_params is not None:
 else:
     # Custom parameters
     duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
-    noise_options = ["White Noise", "Pink Noise", "Brown Noise", "Blue Noise", "Violet Noise", "Grey Noise"]
     noise_types = st.sidebar.multiselect("Noise Types", noise_options, default=["White Noise"])
     lowcut = st.sidebar.slider("Low Cut Frequency (Hz)", min_value=20, max_value=10000, value=100)
     highcut = st.sidebar.slider("High Cut Frequency (Hz)", min_value=1000, max_value=24000, value=5000)
