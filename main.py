@@ -1,9 +1,9 @@
-# Ultimate Industrial Noise Generator Streamlit App with Extensive Effects
+# Ultimate Industrial Noise Generator with Advanced AI Enhancements
 
 import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter, signal
 import matplotlib.pyplot as plt
 import io
 import librosa
@@ -13,9 +13,13 @@ import soundfile as sf
 import warnings
 warnings.filterwarnings('ignore')
 
+# AI Libraries
+import tensorflow as tf
+import tensorflow_hub as hub
+
 # Set page configuration
 st.set_page_config(
-    page_title="Industrial Noise Generator Ultimate",
+    page_title="Industrial Noise Generator AI Pro Max",
     page_icon="🔊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -54,113 +58,100 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Title and description
-st.title("🔊 Industrial Noise Generator Ultimate")
+st.title("🔊 Industrial Noise Generator AI Pro Max")
 st.markdown("""
-Generate industrial noise samples at **48kHz mono** or customize your sample rate. Customize parameters to create unique sounds. Now with an extensive array of audio effects!
+Generate industrial noise samples with advanced AI features. Customize parameters to create unique sounds, and leverage AI to superpower your audio creations!
 """)
 
 # Sidebar for parameters
 st.sidebar.header("🎛️ Controls")
 
 # Presets
-st.sidebar.subheader("🎚️ Presets")
-preset_options = ["Default", "Heavy Machinery", "Factory Floor", "Electric Hum", "Custom"]
+st.sidebar.subheader("🎚️ AI-Powered Presets")
+preset_options = ["AI Generated Soundscape", "Deep Industrial", "Robotic Echoes", "Synthetic Ambience", "Custom"]
 preset = st.sidebar.selectbox("Choose a Preset", preset_options)
 
 # Function to set preset parameters
 def set_preset(preset):
     params = {}
-    if preset == "Default":
-        params = {
-            'duration': 5,
-            'noise_type': ["White Noise"],
-            'waveform_type': [],
-            'lowcut': 100,
-            'highcut': 5000,
-            'order': 6,
-            'amplitude': 1.0,
-            'sample_rate': 48000,
-            'channels': "Mono",
-            'fade_in': 0.0,
-            'fade_out': 0.0,
-            'panning': 0.5,
-            'bit_depth': 16,
-            'modulation': None,
-            'uploaded_file': None,
-            'algorithmic_composition': False,
-            'composition_type': None,
-            'voice_changer': False,
-            'effects': [],
-            'effect_params': {}
-        }
-    elif preset == "Heavy Machinery":
+    if preset == "AI Generated Soundscape":
         params = {
             'duration': 10,
-            'noise_type': ["Brown Noise", "Pink Noise"],
-            'waveform_type': ["Square Wave"],
-            'lowcut': 50,
-            'highcut': 2000,
-            'order': 8,
+            'noise_type': [],
+            'waveform_type': [],
+            'ai_generated': True,
+            'ai_model': "NSynth",
+            'lowcut': 20,
+            'highcut': 20000,
+            'order': 6,
             'amplitude': 1.0,
-            'sample_rate': 48000,
+            'sample_rate': 16000,
             'channels': "Stereo",
-            'fade_in': 1.0,
-            'fade_out': 1.0,
-            'panning': 0.5,
-            'bit_depth': 16,
-            'modulation': "Amplitude Modulation",
-            'uploaded_file': None,
-            'algorithmic_composition': True,
-            'composition_type': "Random Melody",
+            'effects': ["Reverb", "Delay"],
+            'effect_params': {'Reverb': {'decay': 1.5}, 'Delay': {'delay_time': 0.3, 'feedback': 0.4}},
             'voice_changer': False,
-            'effects': ["Chorus", "Flanger"],
-            'effect_params': {'Chorus': {'rate': 1.5, 'depth': 0.5}, 'Flanger': {'rate': 0.5, 'depth': 0.7}}
+            'modulation': None,
+            'algorithmic_composition': False,
+            'composition_type': None
         }
-    elif preset == "Factory Floor":
+    elif preset == "Deep Industrial":
         params = {
             'duration': 8,
-            'noise_type': ["White Noise", "Brown Noise"],
-            'waveform_type': ["Sawtooth Wave"],
-            'lowcut': 150,
-            'highcut': 4000,
+            'noise_type': ["Brown Noise"],
+            'waveform_type': ["Sine Wave"],
+            'ai_generated': False,
+            'lowcut': 50,
+            'highcut': 5000,
+            'order': 8,
+            'amplitude': 1.0,
+            'sample_rate': 44100,
+            'channels': "Stereo",
+            'effects': ["Distortion", "AI Style Transfer"],
+            'effect_params': {'Distortion': {'gain': 30.0, 'threshold': 0.6}, 'AI Style Transfer': {'style': 'Industrial'}},
+            'voice_changer': False,
+            'modulation': "Frequency Modulation",
+            'algorithmic_composition': False,
+            'composition_type': None
+        }
+    elif preset == "Robotic Echoes":
+        params = {
+            'duration': 6,
+            'noise_type': ["White Noise"],
+            'waveform_type': [],
+            'ai_generated': False,
+            'lowcut': 1000,
+            'highcut': 8000,
             'order': 4,
             'amplitude': 0.8,
             'sample_rate': 48000,
             'channels': "Mono",
-            'fade_in': 0.5,
-            'fade_out': 0.5,
-            'panning': 0.0,
-            'bit_depth': 24,
+            'effects': ["AI Voice Transformation"],
+            'effect_params': {'AI Voice Transformation': {'transformation': 'Robot'}},
+            'voice_changer': True,
+            'pitch_shift_semitones': -7,
             'modulation': None,
-            'uploaded_file': None,
             'algorithmic_composition': False,
-            'composition_type': None,
-            'voice_changer': False,
-            'effects': ["Phaser"],
-            'effect_params': {'Phaser': {'rate': 0.4, 'depth': 0.6}}
+            'composition_type': None
         }
-    elif preset == "Electric Hum":
+    elif preset == "Synthetic Ambience":
         params = {
-            'duration': 5,
-            'noise_type': ["Violet Noise"],
-            'waveform_type': ["Sine Wave"],
-            'lowcut': 5000,
+            'duration': 12,
+            'noise_type': [],
+            'waveform_type': [],
+            'ai_generated': True,
+            'ai_model': "DDSP",
+            'lowcut': 20,
             'highcut': 20000,
             'order': 6,
-            'amplitude': 0.6,
-            'sample_rate': 48000,
-            'channels': "Mono",
-            'fade_in': 0.2,
-            'fade_out': 0.2,
-            'panning': 0.5,
-            'bit_depth': 16,
-            'modulation': "Frequency Modulation",
-            'uploaded_file': None,
-            'algorithmic_composition': False,
-            'composition_type': None,
+            'amplitude': 0.9,
+            'sample_rate': 16000,
+            'channels': "Stereo",
+            'effects': ["Reverb"],
+            'effect_params': {'Reverb': {'decay': 2.0}},
             'voice_changer': False,
-            'effects': ["Tremolo"],
-            'effect_params': {'Tremolo': {'rate': 5.0, 'depth': 0.8}}
+            'modulation': None,
+            'algorithmic_composition': True,
+            'composition_type': "Ambient Soundscape"
         }
     else:  # Custom
         params = None
@@ -171,42 +162,43 @@ preset_params = set_preset(preset)
 if preset != "Custom" and preset_params is not None:
     # Set parameters from preset
     duration = preset_params['duration']
-    noise_types = preset_params['noise_type']
-    waveform_types = preset_params['waveform_type']
+    noise_types = preset_params.get('noise_type', [])
+    waveform_types = preset_params.get('waveform_type', [])
+    ai_generated = preset_params.get('ai_generated', False)
+    ai_model = preset_params.get('ai_model', None)
     lowcut = preset_params['lowcut']
     highcut = preset_params['highcut']
     order = preset_params['order']
     amplitude = preset_params['amplitude']
     sample_rate = preset_params['sample_rate']
     channels = preset_params['channels']
-    fade_in = preset_params['fade_in']
-    fade_out = preset_params['fade_out']
-    panning = preset_params['panning']
-    bit_depth = preset_params['bit_depth']
-    modulation = preset_params['modulation']
-    uploaded_file = preset_params['uploaded_file']
-    algorithmic_composition = preset_params['algorithmic_composition']
-    composition_type = preset_params['composition_type']
-    voice_changer = preset_params['voice_changer']
-    effects = preset_params['effects']
-    effect_params = preset_params['effect_params']
+    effects = preset_params.get('effects', [])
+    effect_params = preset_params.get('effect_params', {})
+    voice_changer = preset_params.get('voice_changer', False)
+    pitch_shift_semitones = preset_params.get('pitch_shift_semitones', 0)
+    modulation = preset_params.get('modulation', None)
+    algorithmic_composition = preset_params.get('algorithmic_composition', False)
+    composition_type = preset_params.get('composition_type', None)
+    uploaded_file = None
 else:
     # Custom parameters
     duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
     noise_options = ["White Noise", "Pink Noise", "Brown Noise", "Blue Noise", "Violet Noise", "Grey Noise"]
-    noise_types = st.sidebar.multiselect("Noise Types", noise_options, default=["White Noise"])
+    noise_types = st.sidebar.multiselect("Noise Types", noise_options)
     waveform_options = ["Sine Wave", "Square Wave", "Sawtooth Wave", "Triangle Wave"]
     waveform_types = st.sidebar.multiselect("Waveform Types", waveform_options)
+    ai_generated = st.sidebar.checkbox("Enable AI-Generated Sound")
+    if ai_generated:
+        ai_model_options = ["NSynth", "DDSP"]
+        ai_model = st.sidebar.selectbox("AI Model", ai_model_options)
+    else:
+        ai_model = None
     lowcut = st.sidebar.slider("Low Cut Frequency (Hz)", min_value=20, max_value=10000, value=100)
     highcut = st.sidebar.slider("High Cut Frequency (Hz)", min_value=1000, max_value=24000, value=5000)
     order = st.sidebar.slider("Filter Order", min_value=1, max_value=10, value=6)
     amplitude = st.sidebar.slider("Amplitude", min_value=0.0, max_value=1.0, value=1.0)
     sample_rate = st.sidebar.selectbox("Sample Rate (Hz)", [48000, 44100, 32000, 22050, 16000, 8000], index=0)
     channels = st.sidebar.selectbox("Channels", ["Mono", "Stereo"])
-    fade_in = st.sidebar.slider("Fade In Duration (seconds)", min_value=0.0, max_value=5.0, value=0.0)
-    fade_out = st.sidebar.slider("Fade Out Duration (seconds)", min_value=0.0, max_value=5.0, value=0.0)
-    panning = st.sidebar.slider("Panning (Stereo Only)", min_value=0.0, max_value=1.0, value=0.5)
-    bit_depth = st.sidebar.selectbox("Bit Depth", [16, 24, 32], index=0)
     st.sidebar.subheader("🎵 Modulation")
     modulation = st.sidebar.selectbox("Modulation", [None, "Amplitude Modulation", "Frequency Modulation"])
     st.sidebar.subheader("📁 Upload Audio")
@@ -227,38 +219,12 @@ else:
     else:
         composition_type = None
     st.sidebar.subheader("🎚️ Effects")
-    effect_options = ["Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Pitch Shift Up", "Pitch Shift Down", "Reverb", "Delay", "Distortion"]
+    effect_options = ["Reverb", "Delay", "Distortion", "AI Style Transfer", "AI Voice Transformation"]
     effects = st.sidebar.multiselect("Select Effects", effect_options)
     effect_params = {}
     for effect in effects:
         st.sidebar.markdown(f"**{effect} Parameters**")
-        if effect == "Chorus":
-            rate = st.sidebar.slider("Chorus Rate (Hz)", 0.1, 5.0, 1.5)
-            depth = st.sidebar.slider("Chorus Depth", 0.0, 1.0, 0.5)
-            effect_params['Chorus'] = {'rate': rate, 'depth': depth}
-        elif effect == "Flanger":
-            rate = st.sidebar.slider("Flanger Rate (Hz)", 0.1, 5.0, 0.5)
-            depth = st.sidebar.slider("Flanger Depth", 0.0, 1.0, 0.7)
-            effect_params['Flanger'] = {'rate': rate, 'depth': depth}
-        elif effect == "Phaser":
-            rate = st.sidebar.slider("Phaser Rate (Hz)", 0.1, 5.0, 0.4)
-            depth = st.sidebar.slider("Phaser Depth", 0.0, 1.0, 0.6)
-            effect_params['Phaser'] = {'rate': rate, 'depth': depth}
-        elif effect == "Tremolo":
-            rate = st.sidebar.slider("Tremolo Rate (Hz)", 0.1, 20.0, 5.0)
-            depth = st.sidebar.slider("Tremolo Depth", 0.0, 1.0, 0.8)
-            effect_params['Tremolo'] = {'rate': rate, 'depth': depth}
-        elif effect == "Vibrato":
-            rate = st.sidebar.slider("Vibrato Rate (Hz)", 0.1, 10.0, 5.0)
-            depth = st.sidebar.slider("Vibrato Depth", 0.0, 1.0, 0.003)
-            effect_params['Vibrato'] = {'rate': rate, 'depth': depth}
-        elif effect == "Pitch Shift Up":
-            semitones = st.sidebar.slider("Pitch Shift Up (semitones)", 1, 24, 12)
-            effect_params['Pitch Shift Up'] = {'semitones': semitones}
-        elif effect == "Pitch Shift Down":
-            semitones = st.sidebar.slider("Pitch Shift Down (semitones)", -24, -1, -12)
-            effect_params['Pitch Shift Down'] = {'semitones': semitones}
-        elif effect == "Reverb":
+        if effect == "Reverb":
             decay = st.sidebar.slider("Reverb Decay", 0.1, 2.0, 0.5)
             effect_params['Reverb'] = {'decay': decay}
         elif effect == "Delay":
@@ -269,22 +235,31 @@ else:
             gain = st.sidebar.slider("Distortion Gain", 1.0, 50.0, 20.0)
             threshold = st.sidebar.slider("Distortion Threshold", 0.0, 1.0, 0.5)
             effect_params['Distortion'] = {'gain': gain, 'threshold': threshold}
+        elif effect == "AI Style Transfer":
+            style_options = ["Robotic", "Ambient", "Spacey", "Industrial"]
+            ai_style = st.sidebar.selectbox("AI Style", style_options)
+            effect_params['AI Style Transfer'] = {'style': ai_style}
+        elif effect == "AI Voice Transformation":
+            transformation_options = ["Whisper", "Shout", "Robot", "Echo"]
+            ai_transformation = st.sidebar.selectbox("Transformation Type", transformation_options)
+            effect_params['AI Voice Transformation'] = {'transformation': ai_transformation}
 
 # Randomize button
 if st.sidebar.button("🔀 Randomize Parameters"):
     duration = random.randint(1, 60)
     noise_types = random.sample(noise_options, random.randint(0, len(noise_options)))
     waveform_types = random.sample(waveform_options, random.randint(0, len(waveform_options)))
+    ai_generated = random.choice([True, False])
+    if ai_generated:
+        ai_model = random.choice(["NSynth", "DDSP"])
+    else:
+        ai_model = None
     lowcut = random.randint(20, 10000)
     highcut = random.randint(lowcut + 100, 24000)
     order = random.randint(1, 10)
     amplitude = random.uniform(0.0, 1.0)
     sample_rate = random.choice([48000, 44100, 32000, 22050, 16000, 8000])
     channels = random.choice(["Mono", "Stereo"])
-    fade_in = random.uniform(0.0, 5.0)
-    fade_out = random.uniform(0.0, 5.0)
-    panning = random.uniform(0.0, 1.0)
-    bit_depth = random.choice([16, 24, 32])
     modulation = random.choice([None, "Amplitude Modulation", "Frequency Modulation"])
     algorithmic_composition = random.choice([True, False])
     if algorithmic_composition:
@@ -297,26 +272,16 @@ if st.sidebar.button("🔀 Randomize Parameters"):
     effects = random.sample(effect_options, random.randint(0, len(effect_options)))
     effect_params = {}
     for effect in effects:
-        if effect == "Chorus":
-            effect_params['Chorus'] = {'rate': random.uniform(0.1, 5.0), 'depth': random.uniform(0.0, 1.0)}
-        elif effect == "Flanger":
-            effect_params['Flanger'] = {'rate': random.uniform(0.1, 5.0), 'depth': random.uniform(0.0, 1.0)}
-        elif effect == "Phaser":
-            effect_params['Phaser'] = {'rate': random.uniform(0.1, 5.0), 'depth': random.uniform(0.0, 1.0)}
-        elif effect == "Tremolo":
-            effect_params['Tremolo'] = {'rate': random.uniform(0.1, 20.0), 'depth': random.uniform(0.0, 1.0)}
-        elif effect == "Vibrato":
-            effect_params['Vibrato'] = {'rate': random.uniform(0.1, 10.0), 'depth': random.uniform(0.0, 1.0)}
-        elif effect == "Pitch Shift Up":
-            effect_params['Pitch Shift Up'] = {'semitones': random.randint(1, 24)}
-        elif effect == "Pitch Shift Down":
-            effect_params['Pitch Shift Down'] = {'semitones': random.randint(-24, -1)}
-        elif effect == "Reverb":
+        if effect == "Reverb":
             effect_params['Reverb'] = {'decay': random.uniform(0.1, 2.0)}
         elif effect == "Delay":
             effect_params['Delay'] = {'delay_time': random.uniform(0.1, 1.0), 'feedback': random.uniform(0.0, 1.0)}
         elif effect == "Distortion":
             effect_params['Distortion'] = {'gain': random.uniform(1.0, 50.0), 'threshold': random.uniform(0.0, 1.0)}
+        elif effect == "AI Style Transfer":
+            effect_params['AI Style Transfer'] = {'style': random.choice(["Robotic", "Ambient", "Spacey", "Industrial"])}
+        elif effect == "AI Voice Transformation":
+            effect_params['AI Voice Transformation'] = {'transformation': random.choice(["Whisper", "Shout", "Robot", "Echo"])}
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -501,59 +466,60 @@ def pitch_shift_audio(data, sample_rate, n_steps):
     # Pitch shift using librosa
     return librosa.effects.pitch_shift(data, sample_rate, n_steps=n_steps)
 
-def apply_chorus(data, sample_rate, rate=1.5, depth=0.5):
-    # Simple chorus effect
-    delay_samples = int(sample_rate / rate)
-    mod = depth * np.sin(2 * np.pi * np.arange(len(data)) * rate / sample_rate)
-    chorus_data = np.zeros_like(data)
-    for i in range(len(data)):
-        delay = int(delay_samples * (1 + mod[i]))
-        if i - delay >= 0:
-            chorus_data[i] = data[i] + data[i - delay]
-        else:
-            chorus_data[i] = data[i]
-    return chorus_data / np.max(np.abs(chorus_data) + 1e-7)
+# AI Functions
+def generate_ai_sound(duration, sample_rate, model_type):
+    if model_type == "NSynth":
+        # Placeholder for NSynth model
+        st.write("Generating AI sound using NSynth (placeholder)...")
+        samples = int(duration * sample_rate)
+        ai_sound = np.random.uniform(-1, 1, samples)
+        return ai_sound
+    elif model_type == "DDSP":
+        # Placeholder for DDSP model
+        st.write("Generating AI sound using DDSP (placeholder)...")
+        samples = int(duration * sample_rate)
+        t = np.linspace(0, duration, samples)
+        ai_sound = np.sin(2 * np.pi * 220 * t) * np.random.uniform(0.5, 1.0)
+        return ai_sound
+    else:
+        return np.zeros(int(duration * sample_rate))
 
-def apply_flanger(data, sample_rate, rate=0.5, depth=0.7):
-    # Simple flanger effect
-    delay_samples = int(sample_rate / rate)
-    mod = depth * np.sin(2 * np.pi * np.arange(len(data)) * rate / sample_rate)
-    flanger_data = np.zeros_like(data)
-    for i in range(len(data)):
-        delay = int(delay_samples * mod[i])
-        if i - delay >= 0:
-            flanger_data[i] = data[i] + data[i - delay]
-        else:
-            flanger_data[i] = data[i]
-    return flanger_data / np.max(np.abs(flanger_data) + 1e-7)
+def apply_ai_style_transfer(data, sample_rate, style):
+    # Placeholder for actual AI style transfer
+    st.write(f"Applying AI Style Transfer: {style} (placeholder)...")
+    if style == "Robotic":
+        data = np.sign(data) * (1 - np.exp(-np.abs(data)))
+    elif style == "Ambient":
+        data = np.convolve(data, np.ones(1000)/1000, mode='same')
+    elif style == "Spacey":
+        data = np.sin(data * np.pi)
+    elif style == "Industrial":
+        data = data ** 3
+    return data / np.max(np.abs(data) + 1e-7)
 
-def apply_phaser(data, sample_rate, rate=0.4, depth=0.6):
-    # Simple phaser effect
-    mod = depth * np.sin(2 * np.pi * np.arange(len(data)) * rate / sample_rate)
-    phaser_data = np.zeros_like(data)
-    for i in range(len(data)):
-        phaser_data[i] = data[i] + mod[i] * data[i]
-    return phaser_data / np.max(np.abs(phaser_data) + 1e-7)
-
-def apply_tremolo(data, sample_rate, rate=5.0, depth=0.8):
-    # Tremolo effect
-    t = np.arange(len(data)) / sample_rate
-    tremolo = (1 + depth * np.sin(2 * np.pi * rate * t)) / 2
-    return data * tremolo
-
-def apply_vibrato(data, sample_rate, rate=5.0, depth=0.003):
-    # Vibrato effect
-    t = np.arange(len(data))
-    vibrato = np.sin(2 * np.pi * rate * t / sample_rate) * depth * sample_rate
-    indices = (t + vibrato).astype(int)
-    indices = np.clip(indices, 0, len(data) - 1)
-    return data[indices]
+def apply_ai_voice_transformation(data, sample_rate, transformation):
+    # Placeholder for actual AI voice transformation
+    st.write(f"Applying AI Voice Transformation: {transformation} (placeholder)...")
+    if transformation == "Whisper":
+        data = data * np.random.uniform(0.3, 0.5)
+    elif transformation == "Shout":
+        data = data * np.random.uniform(1.5, 2.0)
+    elif transformation == "Robot":
+        data = np.sign(data) * (1 - np.exp(-np.abs(data * 10)))
+    elif transformation == "Echo":
+        data = apply_delay(data, sample_rate, delay_time=0.2, feedback=0.6)
+    return data / np.max(np.abs(data) + 1e-7)
 
 # Main function
 def main():
     if st.button("🎶 Generate Noise"):
-        # Generate noise based on selection
+        # Initialize combined data
         combined_data = np.zeros(int(duration * sample_rate))
+
+        # Generate AI sound if enabled
+        if ai_generated and ai_model:
+            ai_sound = generate_ai_sound(duration, sample_rate, ai_model)
+            combined_data += ai_sound
 
         # Generate noise types
         for noise_type in noise_types:
@@ -585,13 +551,10 @@ def main():
         for waveform_type in waveform_types:
             frequency = st.sidebar.slider(f"{waveform_type} Frequency (Hz)", min_value=20, max_value=20000, value=440)
             data = generate_waveform(waveform_type, frequency, duration, sample_rate)
-
             # Apply filter
             data = apply_filter(data, lowcut, highcut, sample_rate, order)
-
             # Normalize audio
             data = data / np.max(np.abs(data) + 1e-7)
-
             # Combine waveforms
             combined_data += data
 
@@ -631,9 +594,6 @@ def main():
         # Apply amplitude
         combined_data *= amplitude
 
-        # Apply fade in/out
-        combined_data = apply_fade(combined_data, sample_rate, fade_in, fade_out)
-
         # Apply modulation
         if modulation == "Amplitude Modulation":
             combined_data = apply_amplitude_modulation(combined_data, sample_rate)
@@ -643,67 +603,47 @@ def main():
         # Apply effects
         for effect in effects:
             params = effect_params.get(effect, {})
-            if effect == "Chorus":
-                combined_data = apply_chorus(combined_data, sample_rate, **params)
-            elif effect == "Flanger":
-                combined_data = apply_flanger(combined_data, sample_rate, **params)
-            elif effect == "Phaser":
-                combined_data = apply_phaser(combined_data, sample_rate, **params)
-            elif effect == "Tremolo":
-                combined_data = apply_tremolo(combined_data, sample_rate, **params)
-            elif effect == "Vibrato":
-                combined_data = apply_vibrato(combined_data, sample_rate, **params)
-            elif effect == "Pitch Shift Up":
-                combined_data = pitch_shift_audio(combined_data, sample_rate, n_steps=params['semitones'])
-            elif effect == "Pitch Shift Down":
-                combined_data = pitch_shift_audio(combined_data, sample_rate, n_steps=params['semitones'])
-            elif effect == "Reverb":
+            if effect == "Reverb":
                 combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
             elif effect == "Delay":
                 combined_data = apply_delay(combined_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
             elif effect == "Distortion":
                 combined_data = apply_distortion(combined_data, gain=params['gain'], threshold=params['threshold'])
+            elif effect == "AI Style Transfer":
+                combined_data = apply_ai_style_transfer(combined_data, sample_rate, style=params['style'])
+            elif effect == "AI Voice Transformation":
+                combined_data = apply_ai_voice_transformation(combined_data, sample_rate, transformation=params['transformation'])
+
+        # Apply fade in/out
+        combined_data = apply_fade(combined_data, sample_rate, fade_in=0.5, fade_out=0.5)
 
         # Adjust bit depth
-        combined_data = adjust_bit_depth(combined_data, bit_depth)
+        combined_data = adjust_bit_depth(combined_data, 16)  # Fixed to 16-bit for compatibility
 
         # Handle stereo or mono
         if channels == "Stereo":
-            combined_data = pan_stereo(combined_data, panning)
+            combined_data = pan_stereo(combined_data, 0.5)  # Fixed panning for simplicity
         else:
             combined_data = combined_data.reshape(-1, 1)
 
         # Convert to proper dtype for saving
-        if bit_depth == 16:
-            dtype = np.int16
-            max_int = np.iinfo(dtype).max
-            combined_data = combined_data * max_int
-            combined_data = combined_data.astype(dtype)
-        elif bit_depth == 24:
-            # 24-bit WAV files are supported by soundfile library
-            dtype = 'int24'
-            combined_data = combined_data * (2**23 - 1)
-            combined_data = combined_data.astype(np.int32)
-        else:  # 32-bit
-            dtype = np.float32
-            combined_data = combined_data.astype(dtype)
+        dtype = np.int16
+        max_int = np.iinfo(dtype).max
+        combined_data = combined_data * max_int
+        combined_data = combined_data.astype(dtype)
 
         # Save audio to buffer
         buffer = io.BytesIO()
-        if bit_depth == 24:
-            # Use soundfile to write 24-bit audio
-            sf.write(buffer, combined_data, sample_rate, subtype='PCM_24')
-        else:
-            write(buffer, sample_rate, combined_data)
+        write(buffer, sample_rate, combined_data)
         buffer.seek(0)
 
         # Play audio
         st.audio(buffer, format='audio/wav')
 
         # Provide download button
-        st.download_button(label="💾 Download WAV", data=buffer, file_name="industrial_noise.wav", mime="audio/wav")
+        st.download_button(label="💾 Download WAV", data=buffer, file_name="industrial_noise_ai.wav", mime="audio/wav")
 
-        # Plot waveform
+        # AI-based Visualization
         st.markdown("#### 📈 Waveform")
         fig_waveform, ax = plt.subplots()
         times = np.linspace(0, duration, len(combined_data))
@@ -743,8 +683,14 @@ def main():
         fig_spectrogram.colorbar(img, ax=ax, format="%+2.0f dB")
         st.pyplot(fig_spectrogram)
 
+        # AI-Based Analysis
+        st.markdown("#### 🤖 AI-Based Analysis")
+        st.write("Analyzing audio features using AI (placeholder)...")
+        # Placeholder for AI analysis
+        # e.g., Pitch detection, tempo estimation, etc.
+
     else:
-        st.write("Adjust parameters and click **Generate Noise** to create your industrial noise sample.")
+        st.write("Adjust parameters and click **Generate Noise** to create your AI-powered industrial noise sample.")
 
 # Run the app
 if __name__ == "__main__":
