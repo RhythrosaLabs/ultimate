@@ -1,0 +1,14 @@
+streamlit
+pandas
+numpy
+Pillow
+requests
+replicate
+opencv-python
+scipy
+matplotlib
+pydub
+fpdf
+gtts
+midiutil
+python-dotenv
