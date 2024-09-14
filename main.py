@@ -418,23 +418,35 @@ def apply_filter(data, lowcut, highcut, fs, order=5):
 
 def apply_fade(data, sample_rate, fade_in, fade_out):
     # Apply fade in/out
-    total_samples = len(data)
+    total_samples = data.shape[0]
     fade_in_samples = int(fade_in * sample_rate)
     fade_out_samples = int(fade_out * sample_rate)
+
+    # Ensure fade samples do not exceed total samples
+    fade_in_samples = min(fade_in_samples, total_samples)
+    fade_out_samples = min(fade_out_samples, total_samples)
 
     # Apply fade-in if applicable
     if fade_in_samples > 0:
         fade_in_curve = np.linspace(0, 1, fade_in_samples)
-        if data.ndim > 1:
-            fade_in_curve = fade_in_curve[:, np.newaxis]
-        data[:fade_in_samples] *= fade_in_curve
+        if data.ndim == 1:
+            data[:fade_in_samples] *= fade_in_curve
+        elif data.ndim == 2:
+            fade_in_curve = fade_in_curve.reshape(-1, 1)
+            data[:fade_in_samples, :] *= fade_in_curve
+        else:
+            raise ValueError("Unsupported data dimensions in apply_fade function")
 
     # Apply fade-out if applicable
     if fade_out_samples > 0:
         fade_out_curve = np.linspace(1, 0, fade_out_samples)
-        if data.ndim > 1:
-            fade_out_curve = fade_out_curve[:, np.newaxis]
-        data[-fade_out_samples:] *= fade_out_curve
+        if data.ndim == 1:
+            data[-fade_out_samples:] *= fade_out_curve
+        elif data.ndim == 2:
+            fade_out_curve = fade_out_curve.reshape(-1, 1)
+            data[-fade_out_samples:, :] *= fade_out_curve
+        else:
+            raise ValueError("Unsupported data dimensions in apply_fade function")
 
     return data
 
