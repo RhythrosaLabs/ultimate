@@ -1,9 +1,8 @@
-# Ultimate Industrial Noise Generator with Advanced AI Enhancements
-
 import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write
-from scipy.signal import butter, lfilter, signal
+from scipy.signal import butter, lfilter
+import scipy.signal as signal  # Correctly import scipy.signal as signal
 import matplotlib.pyplot as plt
 import io
 import librosa
