@@ -1,8 +1,8 @@
-# Enhanced Industrial Noise Generator Streamlit App with Voice Changing Feature
+# Ultimate Industrial Noise Generator Streamlit App with Extensive Effects
 
 import streamlit as st
 import numpy as np
-from scipy.io.wavfile import write, read
+from scipy.io.wavfile import write
 from scipy.signal import butter, lfilter
 import matplotlib.pyplot as plt
 import io
@@ -10,10 +10,12 @@ import librosa
 import librosa.display
 import random
 import soundfile as sf
+import warnings
+warnings.filterwarnings('ignore')
 
 # Set page configuration
 st.set_page_config(
-    page_title="Industrial Noise Generator Pro",
+    page_title="Industrial Noise Generator Ultimate",
     page_icon="🔊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -52,9 +54,9 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Title and description
-st.title("🔊 Industrial Noise Generator Pro with Voice Changer")
+st.title("🔊 Industrial Noise Generator Ultimate")
 st.markdown("""
-Generate industrial noise samples at **48kHz mono** or customize your sample rate. Customize parameters to create unique sounds. Now with a **Voice Changer** feature to pitch-shift your vocals down a perfect fourth!
+Generate industrial noise samples at **48kHz mono** or customize your sample rate. Customize parameters to create unique sounds. Now with an extensive array of audio effects!
 """)
 
 # Sidebar for parameters
@@ -81,16 +83,15 @@ def set_preset(preset):
             'channels': "Mono",
             'fade_in': 0.0,
             'fade_out': 0.0,
-            'reverb': False,
-            'delay': False,
-            'distortion': False,
             'panning': 0.5,
             'bit_depth': 16,
             'modulation': None,
             'uploaded_file': None,
             'algorithmic_composition': False,
             'composition_type': None,
-            'voice_changer': False
+            'voice_changer': False,
+            'effects': [],
+            'effect_params': {}
         }
     elif preset == "Heavy Machinery":
         params = {
@@ -105,16 +106,15 @@ def set_preset(preset):
             'channels': "Stereo",
             'fade_in': 1.0,
             'fade_out': 1.0,
-            'reverb': True,
-            'delay': True,
-            'distortion': True,
             'panning': 0.5,
             'bit_depth': 16,
             'modulation': "Amplitude Modulation",
             'uploaded_file': None,
             'algorithmic_composition': True,
             'composition_type': "Random Melody",
-            'voice_changer': False
+            'voice_changer': False,
+            'effects': ["Chorus", "Flanger"],
+            'effect_params': {'Chorus': {'rate': 1.5, 'depth': 0.5}, 'Flanger': {'rate': 0.5, 'depth': 0.7}}
         }
     elif preset == "Factory Floor":
         params = {
@@ -129,16 +129,15 @@ def set_preset(preset):
             'channels': "Mono",
             'fade_in': 0.5,
             'fade_out': 0.5,
-            'reverb': True,
-            'delay': False,
-            'distortion': True,
             'panning': 0.0,
             'bit_depth': 24,
             'modulation': None,
             'uploaded_file': None,
             'algorithmic_composition': False,
             'composition_type': None,
-            'voice_changer': False
+            'voice_changer': False,
+            'effects': ["Phaser"],
+            'effect_params': {'Phaser': {'rate': 0.4, 'depth': 0.6}}
         }
     elif preset == "Electric Hum":
         params = {
@@ -153,16 +152,15 @@ def set_preset(preset):
             'channels': "Mono",
             'fade_in': 0.2,
             'fade_out': 0.2,
-            'reverb': False,
-            'delay': False,
-            'distortion': False,
             'panning': 0.5,
             'bit_depth': 16,
             'modulation': "Frequency Modulation",
             'uploaded_file': None,
             'algorithmic_composition': False,
             'composition_type': None,
-            'voice_changer': False
+            'voice_changer': False,
+            'effects': ["Tremolo"],
+            'effect_params': {'Tremolo': {'rate': 5.0, 'depth': 0.8}}
         }
     else:  # Custom
         params = None
@@ -183,9 +181,6 @@ if preset != "Custom" and preset_params is not None:
     channels = preset_params['channels']
     fade_in = preset_params['fade_in']
     fade_out = preset_params['fade_out']
-    reverb = preset_params['reverb']
-    delay = preset_params['delay']
-    distortion = preset_params['distortion']
     panning = preset_params['panning']
     bit_depth = preset_params['bit_depth']
     modulation = preset_params['modulation']
@@ -193,6 +188,8 @@ if preset != "Custom" and preset_params is not None:
     algorithmic_composition = preset_params['algorithmic_composition']
     composition_type = preset_params['composition_type']
     voice_changer = preset_params['voice_changer']
+    effects = preset_params['effects']
+    effect_params = preset_params['effect_params']
 else:
     # Custom parameters
     duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
@@ -210,19 +207,18 @@ else:
     fade_out = st.sidebar.slider("Fade Out Duration (seconds)", min_value=0.0, max_value=5.0, value=0.0)
     panning = st.sidebar.slider("Panning (Stereo Only)", min_value=0.0, max_value=1.0, value=0.5)
     bit_depth = st.sidebar.selectbox("Bit Depth", [16, 24, 32], index=0)
-    st.sidebar.subheader("🎵 Effects")
-    reverb = st.sidebar.checkbox("Add Reverb")
-    delay = st.sidebar.checkbox("Add Delay")
-    distortion = st.sidebar.checkbox("Add Distortion")
+    st.sidebar.subheader("🎵 Modulation")
     modulation = st.sidebar.selectbox("Modulation", [None, "Amplitude Modulation", "Frequency Modulation"])
     st.sidebar.subheader("📁 Upload Audio")
     uploaded_file = st.sidebar.file_uploader("Upload an audio file to include", type=["wav", "mp3"])
     st.sidebar.subheader("🎤 Voice Changer")
-    voice_changer = st.sidebar.checkbox("Enable Voice Changer (Pitch Shift Down a Fourth)")
+    voice_changer = st.sidebar.checkbox("Enable Voice Changer (Pitch Shift)")
     if voice_changer:
         voice_file = st.sidebar.file_uploader("Upload your voice recording", type=["wav", "mp3"])
+        pitch_shift_semitones = st.sidebar.slider("Pitch Shift (semitones)", min_value=-24, max_value=24, value=-5)
     else:
         voice_file = None
+        pitch_shift_semitones = 0
     st.sidebar.subheader("🎼 Algorithmic Composition")
     algorithmic_composition = st.sidebar.checkbox("Enable Algorithmic Composition")
     if algorithmic_composition:
@@ -230,6 +226,49 @@ else:
         composition_type = st.sidebar.selectbox("Composition Type", composition_options)
     else:
         composition_type = None
+    st.sidebar.subheader("🎚️ Effects")
+    effect_options = ["Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Pitch Shift Up", "Pitch Shift Down", "Reverb", "Delay", "Distortion"]
+    effects = st.sidebar.multiselect("Select Effects", effect_options)
+    effect_params = {}
+    for effect in effects:
+        st.sidebar.markdown(f"**{effect} Parameters**")
+        if effect == "Chorus":
+            rate = st.sidebar.slider("Chorus Rate (Hz)", 0.1, 5.0, 1.5)
+            depth = st.sidebar.slider("Chorus Depth", 0.0, 1.0, 0.5)
+            effect_params['Chorus'] = {'rate': rate, 'depth': depth}
+        elif effect == "Flanger":
+            rate = st.sidebar.slider("Flanger Rate (Hz)", 0.1, 5.0, 0.5)
+            depth = st.sidebar.slider("Flanger Depth", 0.0, 1.0, 0.7)
+            effect_params['Flanger'] = {'rate': rate, 'depth': depth}
+        elif effect == "Phaser":
+            rate = st.sidebar.slider("Phaser Rate (Hz)", 0.1, 5.0, 0.4)
+            depth = st.sidebar.slider("Phaser Depth", 0.0, 1.0, 0.6)
+            effect_params['Phaser'] = {'rate': rate, 'depth': depth}
+        elif effect == "Tremolo":
+            rate = st.sidebar.slider("Tremolo Rate (Hz)", 0.1, 20.0, 5.0)
+            depth = st.sidebar.slider("Tremolo Depth", 0.0, 1.0, 0.8)
+            effect_params['Tremolo'] = {'rate': rate, 'depth': depth}
+        elif effect == "Vibrato":
+            rate = st.sidebar.slider("Vibrato Rate (Hz)", 0.1, 10.0, 5.0)
+            depth = st.sidebar.slider("Vibrato Depth", 0.0, 1.0, 0.003)
+            effect_params['Vibrato'] = {'rate': rate, 'depth': depth}
+        elif effect == "Pitch Shift Up":
+            semitones = st.sidebar.slider("Pitch Shift Up (semitones)", 1, 24, 12)
+            effect_params['Pitch Shift Up'] = {'semitones': semitones}
+        elif effect == "Pitch Shift Down":
+            semitones = st.sidebar.slider("Pitch Shift Down (semitones)", -24, -1, -12)
+            effect_params['Pitch Shift Down'] = {'semitones': semitones}
+        elif effect == "Reverb":
+            decay = st.sidebar.slider("Reverb Decay", 0.1, 2.0, 0.5)
+            effect_params['Reverb'] = {'decay': decay}
+        elif effect == "Delay":
+            delay_time = st.sidebar.slider("Delay Time (seconds)", 0.1, 1.0, 0.5)
+            feedback = st.sidebar.slider("Delay Feedback", 0.0, 1.0, 0.5)
+            effect_params['Delay'] = {'delay_time': delay_time, 'feedback': feedback}
+        elif effect == "Distortion":
+            gain = st.sidebar.slider("Distortion Gain", 1.0, 50.0, 20.0)
+            threshold = st.sidebar.slider("Distortion Threshold", 0.0, 1.0, 0.5)
+            effect_params['Distortion'] = {'gain': gain, 'threshold': threshold}
 
 # Randomize button
 if st.sidebar.button("🔀 Randomize Parameters"):
@@ -246,9 +285,6 @@ if st.sidebar.button("🔀 Randomize Parameters"):
     fade_out = random.uniform(0.0, 5.0)
     panning = random.uniform(0.0, 1.0)
     bit_depth = random.choice([16, 24, 32])
-    reverb = random.choice([True, False])
-    delay = random.choice([True, False])
-    distortion = random.choice([True, False])
     modulation = random.choice([None, "Amplitude Modulation", "Frequency Modulation"])
     algorithmic_composition = random.choice([True, False])
     if algorithmic_composition:
@@ -256,6 +292,31 @@ if st.sidebar.button("🔀 Randomize Parameters"):
     else:
         composition_type = None
     voice_changer = random.choice([True, False])
+    if voice_changer:
+        pitch_shift_semitones = random.randint(-24, 24)
+    effects = random.sample(effect_options, random.randint(0, len(effect_options)))
+    effect_params = {}
+    for effect in effects:
+        if effect == "Chorus":
+            effect_params['Chorus'] = {'rate': random.uniform(0.1, 5.0), 'depth': random.uniform(0.0, 1.0)}
+        elif effect == "Flanger":
+            effect_params['Flanger'] = {'rate': random.uniform(0.1, 5.0), 'depth': random.uniform(0.0, 1.0)}
+        elif effect == "Phaser":
+            effect_params['Phaser'] = {'rate': random.uniform(0.1, 5.0), 'depth': random.uniform(0.0, 1.0)}
+        elif effect == "Tremolo":
+            effect_params['Tremolo'] = {'rate': random.uniform(0.1, 20.0), 'depth': random.uniform(0.0, 1.0)}
+        elif effect == "Vibrato":
+            effect_params['Vibrato'] = {'rate': random.uniform(0.1, 10.0), 'depth': random.uniform(0.0, 1.0)}
+        elif effect == "Pitch Shift Up":
+            effect_params['Pitch Shift Up'] = {'semitones': random.randint(1, 24)}
+        elif effect == "Pitch Shift Down":
+            effect_params['Pitch Shift Down'] = {'semitones': random.randint(-24, -1)}
+        elif effect == "Reverb":
+            effect_params['Reverb'] = {'decay': random.uniform(0.1, 2.0)}
+        elif effect == "Delay":
+            effect_params['Delay'] = {'delay_time': random.uniform(0.1, 1.0), 'feedback': random.uniform(0.0, 1.0)}
+        elif effect == "Distortion":
+            effect_params['Distortion'] = {'gain': random.uniform(1.0, 50.0), 'threshold': random.uniform(0.0, 1.0)}
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -308,24 +369,18 @@ def generate_grey_noise(duration, sample_rate):
     return grey_noise
 
 # Functions to generate waveforms
-def generate_sine_wave(frequency, duration, sample_rate):
+def generate_waveform(waveform_type, frequency, duration, sample_rate):
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    waveform = np.sin(2 * np.pi * frequency * t)
-    return waveform
-
-def generate_square_wave(frequency, duration, sample_rate):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    waveform = signal.square(2 * np.pi * frequency * t)
-    return waveform
-
-def generate_sawtooth_wave(frequency, duration, sample_rate):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    waveform = signal.sawtooth(2 * np.pi * frequency * t)
-    return waveform
-
-def generate_triangle_wave(frequency, duration, sample_rate):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    waveform = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    if waveform_type == "Sine Wave":
+        waveform = np.sin(2 * np.pi * frequency * t)
+    elif waveform_type == "Square Wave":
+        waveform = signal.square(2 * np.pi * frequency * t)
+    elif waveform_type == "Sawtooth Wave":
+        waveform = signal.sawtooth(2 * np.pi * frequency * t)
+    elif waveform_type == "Triangle Wave":
+        waveform = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    else:
+        waveform = np.zeros_like(t)
     return waveform
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
@@ -446,6 +501,54 @@ def pitch_shift_audio(data, sample_rate, n_steps):
     # Pitch shift using librosa
     return librosa.effects.pitch_shift(data, sample_rate, n_steps=n_steps)
 
+def apply_chorus(data, sample_rate, rate=1.5, depth=0.5):
+    # Simple chorus effect
+    delay_samples = int(sample_rate / rate)
+    mod = depth * np.sin(2 * np.pi * np.arange(len(data)) * rate / sample_rate)
+    chorus_data = np.zeros_like(data)
+    for i in range(len(data)):
+        delay = int(delay_samples * (1 + mod[i]))
+        if i - delay >= 0:
+            chorus_data[i] = data[i] + data[i - delay]
+        else:
+            chorus_data[i] = data[i]
+    return chorus_data / np.max(np.abs(chorus_data) + 1e-7)
+
+def apply_flanger(data, sample_rate, rate=0.5, depth=0.7):
+    # Simple flanger effect
+    delay_samples = int(sample_rate / rate)
+    mod = depth * np.sin(2 * np.pi * np.arange(len(data)) * rate / sample_rate)
+    flanger_data = np.zeros_like(data)
+    for i in range(len(data)):
+        delay = int(delay_samples * mod[i])
+        if i - delay >= 0:
+            flanger_data[i] = data[i] + data[i - delay]
+        else:
+            flanger_data[i] = data[i]
+    return flanger_data / np.max(np.abs(flanger_data) + 1e-7)
+
+def apply_phaser(data, sample_rate, rate=0.4, depth=0.6):
+    # Simple phaser effect
+    mod = depth * np.sin(2 * np.pi * np.arange(len(data)) * rate / sample_rate)
+    phaser_data = np.zeros_like(data)
+    for i in range(len(data)):
+        phaser_data[i] = data[i] + mod[i] * data[i]
+    return phaser_data / np.max(np.abs(phaser_data) + 1e-7)
+
+def apply_tremolo(data, sample_rate, rate=5.0, depth=0.8):
+    # Tremolo effect
+    t = np.arange(len(data)) / sample_rate
+    tremolo = (1 + depth * np.sin(2 * np.pi * rate * t)) / 2
+    return data * tremolo
+
+def apply_vibrato(data, sample_rate, rate=5.0, depth=0.003):
+    # Vibrato effect
+    t = np.arange(len(data))
+    vibrato = np.sin(2 * np.pi * rate * t / sample_rate) * depth * sample_rate
+    indices = (t + vibrato).astype(int)
+    indices = np.clip(indices, 0, len(data) - 1)
+    return data[indices]
+
 # Main function
 def main():
     if st.button("🎶 Generate Noise"):
@@ -481,16 +584,7 @@ def main():
         # Generate waveform types
         for waveform_type in waveform_types:
             frequency = st.sidebar.slider(f"{waveform_type} Frequency (Hz)", min_value=20, max_value=20000, value=440)
-            if waveform_type == "Sine Wave":
-                data = generate_sine_wave(frequency, duration, sample_rate)
-            elif waveform_type == "Square Wave":
-                data = generate_square_wave(frequency, duration, sample_rate)
-            elif waveform_type == "Sawtooth Wave":
-                data = generate_sawtooth_wave(frequency, duration, sample_rate)
-            elif waveform_type == "Triangle Wave":
-                data = generate_triangle_wave(frequency, duration, sample_rate)
-            else:
-                data = np.zeros(int(duration * sample_rate))
+            data = generate_waveform(waveform_type, frequency, duration, sample_rate)
 
             # Apply filter
             data = apply_filter(data, lowcut, highcut, sample_rate, order)
@@ -515,8 +609,8 @@ def main():
             voice_bytes = voice_file.read()
             # Load the voice file
             y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
-            # Pitch shift down a perfect fourth (5 semitones down)
-            y_shifted = pitch_shift_audio(y, sr, n_steps=-5)
+            # Pitch shift by specified semitones
+            y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
             # Ensure length matches
             if len(y_shifted) > len(combined_data):
                 y_shifted = y_shifted[:len(combined_data)]
@@ -547,12 +641,28 @@ def main():
             combined_data = apply_frequency_modulation(combined_data, sample_rate)
 
         # Apply effects
-        if reverb:
-            combined_data = apply_reverb(combined_data, sample_rate)
-        if delay:
-            combined_data = apply_delay(combined_data, sample_rate)
-        if distortion:
-            combined_data = apply_distortion(combined_data)
+        for effect in effects:
+            params = effect_params.get(effect, {})
+            if effect == "Chorus":
+                combined_data = apply_chorus(combined_data, sample_rate, **params)
+            elif effect == "Flanger":
+                combined_data = apply_flanger(combined_data, sample_rate, **params)
+            elif effect == "Phaser":
+                combined_data = apply_phaser(combined_data, sample_rate, **params)
+            elif effect == "Tremolo":
+                combined_data = apply_tremolo(combined_data, sample_rate, **params)
+            elif effect == "Vibrato":
+                combined_data = apply_vibrato(combined_data, sample_rate, **params)
+            elif effect == "Pitch Shift Up":
+                combined_data = pitch_shift_audio(combined_data, sample_rate, n_steps=params['semitones'])
+            elif effect == "Pitch Shift Down":
+                combined_data = pitch_shift_audio(combined_data, sample_rate, n_steps=params['semitones'])
+            elif effect == "Reverb":
+                combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
+            elif effect == "Delay":
+                combined_data = apply_delay(combined_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
+            elif effect == "Distortion":
+                combined_data = apply_distortion(combined_data, gain=params['gain'], threshold=params['threshold'])
 
         # Adjust bit depth
         combined_data = adjust_bit_depth(combined_data, bit_depth)
