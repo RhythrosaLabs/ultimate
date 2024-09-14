@@ -417,6 +417,10 @@ def apply_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 def apply_fade(data, sample_rate, fade_in, fade_out):
+    # Ensure data is at least two-dimensional
+    if data.ndim == 1:
+        data = data.reshape(-1, 1)
+
     # Apply fade in/out
     total_samples = data.shape[0]
     fade_in_samples = int(fade_in * sample_rate)
@@ -428,25 +432,17 @@ def apply_fade(data, sample_rate, fade_in, fade_out):
 
     # Apply fade-in if applicable
     if fade_in_samples > 0:
-        fade_in_curve = np.linspace(0, 1, fade_in_samples)
-        if data.ndim == 1:
-            data[:fade_in_samples] *= fade_in_curve
-        elif data.ndim == 2:
-            fade_in_curve = fade_in_curve.reshape(-1, 1)
-            data[:fade_in_samples, :] *= fade_in_curve
-        else:
-            raise ValueError("Unsupported data dimensions in apply_fade function")
+        fade_in_curve = np.linspace(0, 1, fade_in_samples).reshape(-1, 1)
+        data[:fade_in_samples] *= fade_in_curve
 
     # Apply fade-out if applicable
     if fade_out_samples > 0:
-        fade_out_curve = np.linspace(1, 0, fade_out_samples)
-        if data.ndim == 1:
-            data[-fade_out_samples:] *= fade_out_curve
-        elif data.ndim == 2:
-            fade_out_curve = fade_out_curve.reshape(-1, 1)
-            data[-fade_out_samples:, :] *= fade_out_curve
-        else:
-            raise ValueError("Unsupported data dimensions in apply_fade function")
+        fade_out_curve = np.linspace(1, 0, fade_out_samples).reshape(-1, 1)
+        data[-fade_out_samples:] *= fade_out_curve
+
+    # Flatten data if original was one-dimensional
+    if data.shape[1] == 1:
+        data = data.flatten()
 
     return data
 
@@ -832,67 +828,91 @@ def main():
             # Normalize combined data
             combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
 
+            # Make a copy for plotting before converting to integer types
+            plot_data = combined_data.copy()
+
             # Apply varied amplitude
             combined_data *= varied_amplitude
+            plot_data *= varied_amplitude
 
             # Apply modulation
             if modulation == "Amplitude Modulation":
                 combined_data = apply_amplitude_modulation(combined_data, sample_rate)
+                plot_data = apply_amplitude_modulation(plot_data, sample_rate)
             elif modulation == "Frequency Modulation":
                 combined_data = apply_frequency_modulation(combined_data, sample_rate)
+                plot_data = apply_frequency_modulation(plot_data, sample_rate)
 
             # Apply fade in/out
             combined_data = apply_fade(combined_data, sample_rate, fade_in, fade_out)
+            plot_data = apply_fade(plot_data, sample_rate, fade_in, fade_out)
 
             # Apply reverse
             if reverse_audio:
                 combined_data = apply_reverse(combined_data)
+                plot_data = apply_reverse(plot_data)
 
             # Apply bitcrusher
             if bitcrusher:
                 combined_data = apply_bitcrusher(combined_data, bitcrusher_depth)
+                plot_data = apply_bitcrusher(plot_data, bitcrusher_depth)
 
             # Apply sample rate reduction
             if sample_reduction and sample_reduction_factor > 1:
                 combined_data = apply_sample_reduction(combined_data, sample_reduction_factor)
+                plot_data = apply_sample_reduction(plot_data, sample_reduction_factor)
 
             # Apply rhythmic effects
             for effect in rhythmic_effects:
                 if effect == "Stutter":
                     combined_data = apply_stutter(combined_data, sample_rate)
+                    plot_data = apply_stutter(plot_data, sample_rate)
                 elif effect == "Glitch":
                     combined_data = apply_glitch(combined_data, sample_rate)
+                    plot_data = apply_glitch(plot_data, sample_rate)
 
             # Apply arpeggiation
             if arpeggiation:
                 combined_data = apply_arpeggiation(combined_data, sample_rate, pattern=sequence_pattern)
+                plot_data = apply_arpeggiation(plot_data, sample_rate, pattern=sequence_pattern)
 
             # Apply sequencer
             if sequencer:
                 combined_data = apply_sequencer(combined_data, sample_rate, pattern=sequence_pattern)
+                plot_data = apply_sequencer(plot_data, sample_rate, pattern=sequence_pattern)
 
             # Apply other effects with varied parameters
             for effect in effects:
                 params = varied_effect_params.get(effect, {})
                 if effect == "Reverb":
                     combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
+                    plot_data = apply_reverb(plot_data, sample_rate, decay=params['decay'])
                 elif effect == "Delay":
                     combined_data = apply_delay(combined_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
+                    plot_data = apply_delay(plot_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
                 elif effect == "Distortion":
                     combined_data = apply_distortion(combined_data, gain=params['gain'], threshold=params['threshold'])
+                    plot_data = apply_distortion(plot_data, gain=params['gain'], threshold=params['threshold'])
                 elif effect == "Tremolo":
                     combined_data = apply_tremolo(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    plot_data = apply_tremolo(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
 
-            # Adjust bit depth
+            # Adjust bit depth on combined_data (not on plot_data)
             combined_data = adjust_bit_depth(combined_data, bit_depth)
 
-            # Handle stereo or mono
+            # Handle stereo or mono for combined_data
             if channels == "Stereo":
                 combined_data = pan_stereo(combined_data, panning)
             else:
                 combined_data = combined_data.reshape(-1, 1)
 
-            # Convert to proper dtype for saving
+            # Handle stereo or mono for plot_data
+            if channels == "Stereo":
+                plot_data = pan_stereo(plot_data, panning)
+            else:
+                plot_data = plot_data.reshape(-1, 1)
+
+            # Convert combined_data to proper dtype for saving
             if bit_depth == 16:
                 dtype = np.int16
                 max_int = np.iinfo(dtype).max
@@ -925,12 +945,12 @@ def main():
             # Plot waveform
             st.markdown("#### 📈 Waveform")
             fig_waveform, ax = plt.subplots()
-            times = np.linspace(0, duration, len(combined_data))
+            times = np.linspace(0, duration, len(plot_data))
             if channels == "Stereo":
-                ax.plot(times, combined_data[:,0], label='Left Channel', color='steelblue')
-                ax.plot(times, combined_data[:,1], label='Right Channel', color='darkorange')
+                ax.plot(times, plot_data[:,0], label='Left Channel', color='steelblue')
+                ax.plot(times, plot_data[:,1], label='Right Channel', color='darkorange')
             else:
-                ax.plot(times, combined_data, color='steelblue')
+                ax.plot(times, plot_data.flatten(), color='steelblue')
             ax.set_xlabel("Time [s]")
             ax.set_ylabel("Amplitude")
             ax.grid(True)
@@ -942,9 +962,9 @@ def main():
             st.markdown("#### 📊 Frequency Spectrum")
             fig_spectrum, ax = plt.subplots()
             if channels == "Stereo":
-                data_mono = combined_data.mean(axis=1)
+                data_mono = plot_data.mean(axis=1)
             else:
-                data_mono = combined_data.flatten()
+                data_mono = plot_data.flatten()
             freqs = np.fft.rfftfreq(len(data_mono), 1/sample_rate)
             fft_magnitude = np.abs(np.fft.rfft(data_mono))
             ax.semilogx(freqs, fft_magnitude, color='darkorange')
