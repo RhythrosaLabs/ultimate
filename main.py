@@ -1,7 +1,9 @@
+# Enhanced Industrial Noise Generator Streamlit App with Waveforms, Upload, and Algorithmic Composition
+
 import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write
-from scipy.signal import butter, lfilter, freqz
+from scipy.signal import butter, lfilter
 from scipy import signal
 import matplotlib.pyplot as plt
 import io
@@ -58,9 +60,6 @@ Generate industrial noise samples at **48kHz mono** or customize your sample rat
 # Sidebar for parameters
 st.sidebar.header("🎛️ Controls")
 
-# Define noise_options here, outside of any conditional blocks
-noise_options = ["White Noise", "Pink Noise", "Brown Noise", "Blue Noise", "Violet Noise", "Grey Noise"]
-
 # Presets
 st.sidebar.subheader("🎚️ Presets")
 preset_options = ["Default", "Heavy Machinery", "Factory Floor", "Electric Hum", "Custom"]
@@ -73,6 +72,7 @@ def set_preset(preset):
         params = {
             'duration': 5,
             'noise_type': ["White Noise"],
+            'waveform_type': [],
             'lowcut': 100,
             'highcut': 5000,
             'order': 6,
@@ -86,12 +86,16 @@ def set_preset(preset):
             'distortion': False,
             'panning': 0.5,
             'bit_depth': 16,
-            'modulation': None
+            'modulation': None,
+            'uploaded_file': None,
+            'algorithmic_composition': False,
+            'composition_type': None
         }
     elif preset == "Heavy Machinery":
         params = {
             'duration': 10,
             'noise_type': ["Brown Noise", "Pink Noise"],
+            'waveform_type': ["Square Wave"],
             'lowcut': 50,
             'highcut': 2000,
             'order': 8,
@@ -105,12 +109,16 @@ def set_preset(preset):
             'distortion': True,
             'panning': 0.5,
             'bit_depth': 16,
-            'modulation': "Amplitude Modulation"
+            'modulation': "Amplitude Modulation",
+            'uploaded_file': None,
+            'algorithmic_composition': True,
+            'composition_type': "Random Melody"
         }
     elif preset == "Factory Floor":
         params = {
             'duration': 8,
             'noise_type': ["White Noise", "Brown Noise"],
+            'waveform_type': ["Sawtooth Wave"],
             'lowcut': 150,
             'highcut': 4000,
             'order': 4,
@@ -124,12 +132,16 @@ def set_preset(preset):
             'distortion': True,
             'panning': 0.0,
             'bit_depth': 24,
-            'modulation': None
+            'modulation': None,
+            'uploaded_file': None,
+            'algorithmic_composition': False,
+            'composition_type': None
         }
     elif preset == "Electric Hum":
         params = {
             'duration': 5,
             'noise_type': ["Violet Noise"],
+            'waveform_type': ["Sine Wave"],
             'lowcut': 5000,
             'highcut': 20000,
             'order': 6,
@@ -143,7 +155,10 @@ def set_preset(preset):
             'distortion': False,
             'panning': 0.5,
             'bit_depth': 16,
-            'modulation': "Frequency Modulation"
+            'modulation': "Frequency Modulation",
+            'uploaded_file': None,
+            'algorithmic_composition': False,
+            'composition_type': None
         }
     else:  # Custom
         params = None
@@ -155,6 +170,7 @@ if preset != "Custom" and preset_params is not None:
     # Set parameters from preset
     duration = preset_params['duration']
     noise_types = preset_params['noise_type']
+    waveform_types = preset_params['waveform_type']
     lowcut = preset_params['lowcut']
     highcut = preset_params['highcut']
     order = preset_params['order']
@@ -169,10 +185,16 @@ if preset != "Custom" and preset_params is not None:
     panning = preset_params['panning']
     bit_depth = preset_params['bit_depth']
     modulation = preset_params['modulation']
+    uploaded_file = preset_params['uploaded_file']
+    algorithmic_composition = preset_params['algorithmic_composition']
+    composition_type = preset_params['composition_type']
 else:
     # Custom parameters
     duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
+    noise_options = ["White Noise", "Pink Noise", "Brown Noise", "Blue Noise", "Violet Noise", "Grey Noise"]
     noise_types = st.sidebar.multiselect("Noise Types", noise_options, default=["White Noise"])
+    waveform_options = ["Sine Wave", "Square Wave", "Sawtooth Wave", "Triangle Wave"]
+    waveform_types = st.sidebar.multiselect("Waveform Types", waveform_options)
     lowcut = st.sidebar.slider("Low Cut Frequency (Hz)", min_value=20, max_value=10000, value=100)
     highcut = st.sidebar.slider("High Cut Frequency (Hz)", min_value=1000, max_value=24000, value=5000)
     order = st.sidebar.slider("Filter Order", min_value=1, max_value=10, value=6)
@@ -188,11 +210,21 @@ else:
     delay = st.sidebar.checkbox("Add Delay")
     distortion = st.sidebar.checkbox("Add Distortion")
     modulation = st.sidebar.selectbox("Modulation", [None, "Amplitude Modulation", "Frequency Modulation"])
+    st.sidebar.subheader("📁 Upload Audio")
+    uploaded_file = st.sidebar.file_uploader("Upload an audio file to include", type=["wav", "mp3"])
+    st.sidebar.subheader("🎼 Algorithmic Composition")
+    algorithmic_composition = st.sidebar.checkbox("Enable Algorithmic Composition")
+    if algorithmic_composition:
+        composition_options = ["Random Melody", "Ambient Soundscape", "Rhythmic Pattern"]
+        composition_type = st.sidebar.selectbox("Composition Type", composition_options)
+    else:
+        composition_type = None
 
 # Randomize button
 if st.sidebar.button("🔀 Randomize Parameters"):
     duration = random.randint(1, 60)
-    noise_types = random.sample(noise_options, random.randint(1, len(noise_options)))
+    noise_types = random.sample(noise_options, random.randint(0, len(noise_options)))
+    waveform_types = random.sample(waveform_options, random.randint(0, len(waveform_options)))
     lowcut = random.randint(20, 10000)
     highcut = random.randint(lowcut + 100, 24000)
     order = random.randint(1, 10)
@@ -207,6 +239,11 @@ if st.sidebar.button("🔀 Randomize Parameters"):
     delay = random.choice([True, False])
     distortion = random.choice([True, False])
     modulation = random.choice([None, "Amplitude Modulation", "Frequency Modulation"])
+    algorithmic_composition = random.choice([True, False])
+    if algorithmic_composition:
+        composition_type = random.choice(["Random Melody", "Ambient Soundscape", "Rhythmic Pattern"])
+    else:
+        composition_type = None
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -227,7 +264,7 @@ def generate_pink_noise(duration, sample_rate):
 def generate_brown_noise(duration, sample_rate):
     samples = int(duration * sample_rate)
     brown_noise = np.cumsum(np.random.randn(samples))
-    brown_noise = brown_noise / np.max(np.abs(brown_noise))
+    brown_noise = brown_noise / np.max(np.abs(brown_noise) + 1e-7)
     return brown_noise
 
 def generate_blue_noise(duration, sample_rate):
@@ -252,11 +289,32 @@ def generate_grey_noise(duration, sample_rate):
     white = np.random.normal(0, 1, samples)
     freqs = np.fft.rfftfreq(samples, 1/sample_rate)
     a_weighting = (12200**2 * freqs**4) / ((freqs**2 + 20.6**2) * np.sqrt((freqs**2 + 107.7**2) * (freqs**2 + 737.9**2)) * (freqs**2 + 12200**2))
-    a_weighting = a_weighting / np.max(a_weighting)
+    a_weighting = a_weighting / np.max(a_weighting + 1e-7)
     white_fft = np.fft.rfft(white)
     grey_fft = white_fft * a_weighting
     grey_noise = np.fft.irfft(grey_fft)
     return grey_noise
+
+# Functions to generate waveforms
+def generate_sine_wave(frequency, duration, sample_rate):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    waveform = np.sin(2 * np.pi * frequency * t)
+    return waveform
+
+def generate_square_wave(frequency, duration, sample_rate):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    waveform = signal.square(2 * np.pi * frequency * t)
+    return waveform
+
+def generate_sawtooth_wave(frequency, duration, sample_rate):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    waveform = signal.sawtooth(2 * np.pi * frequency * t)
+    return waveform
+
+def generate_triangle_wave(frequency, duration, sample_rate):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    waveform = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    return waveform
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     # Create a bandpass filter
@@ -334,12 +392,51 @@ def pan_stereo(data, panning):
     stereo_data = np.vstack((left, right)).T
     return stereo_data
 
+def generate_algorithmic_composition(duration, sample_rate, composition_type):
+    if composition_type == "Random Melody":
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        melody = np.zeros_like(t)
+        num_notes = int(duration * 2)  # 2 notes per second
+        note_durations = np.random.uniform(0.1, 0.5, size=num_notes)
+        note_frequencies = np.random.uniform(200, 800, size=num_notes)
+        current_sample = 0
+        for i in range(num_notes):
+            note_duration_samples = int(note_durations[i] * sample_rate)
+            end_sample = current_sample + note_duration_samples
+            if end_sample > len(t):
+                end_sample = len(t)
+            melody[current_sample:end_sample] = np.sin(2 * np.pi * note_frequencies[i] * t[current_sample:end_sample])
+            current_sample = end_sample
+            if current_sample >= len(t):
+                break
+        return melody
+    elif composition_type == "Ambient Soundscape":
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        soundscape = np.sin(2 * np.pi * 220 * t) * np.random.uniform(0.5, 1.0)
+        return soundscape
+    elif composition_type == "Rhythmic Pattern":
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        bpm = 120
+        beat_duration = 60 / bpm
+        num_beats = int(duration / beat_duration)
+        rhythm = np.zeros_like(t)
+        for i in range(num_beats):
+            start_sample = int(i * beat_duration * sample_rate)
+            end_sample = start_sample + int(0.1 * sample_rate)  # 100 ms per beat
+            if end_sample > len(t):
+                end_sample = len(t)
+            rhythm[start_sample:end_sample] = 1.0
+        return rhythm * np.sin(2 * np.pi * 440 * t)
+    else:
+        return np.zeros(int(duration * sample_rate))
+
 # Main function
 def main():
     if st.button("🎶 Generate Noise"):
         # Generate noise based on selection
         combined_data = np.zeros(int(duration * sample_rate))
 
+        # Generate noise types
         for noise_type in noise_types:
             if noise_type == "White Noise":
                 data = generate_white_noise(duration, sample_rate)
@@ -355,19 +452,57 @@ def main():
                 data = generate_grey_noise(duration, sample_rate)
             else:
                 data = np.zeros(int(duration * sample_rate))
-            
+
             # Apply filter
             data = apply_filter(data, lowcut, highcut, sample_rate, order)
-            
+
             # Normalize audio
-            data = data / np.max(np.abs(data) + 1e-7)  # Added epsilon to prevent division by zero
-            
+            data = data / np.max(np.abs(data) + 1e-7)
+
             # Combine noises
+            combined_data += data
+
+        # Generate waveform types
+        for waveform_type in waveform_types:
+            frequency = st.sidebar.slider(f"{waveform_type} Frequency (Hz)", min_value=20, max_value=20000, value=440)
+            if waveform_type == "Sine Wave":
+                data = generate_sine_wave(frequency, duration, sample_rate)
+            elif waveform_type == "Square Wave":
+                data = generate_square_wave(frequency, duration, sample_rate)
+            elif waveform_type == "Sawtooth Wave":
+                data = generate_sawtooth_wave(frequency, duration, sample_rate)
+            elif waveform_type == "Triangle Wave":
+                data = generate_triangle_wave(frequency, duration, sample_rate)
+            else:
+                data = np.zeros(int(duration * sample_rate))
+
+            # Apply filter
+            data = apply_filter(data, lowcut, highcut, sample_rate, order)
+
+            # Normalize audio
+            data = data / np.max(np.abs(data) + 1e-7)
+
+            # Combine waveforms
+            combined_data += data
+
+        # Include uploaded audio file
+        if uploaded_file is not None:
+            audio_bytes = uploaded_file.read()
+            # Load the uploaded file
+            y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+            y = y[:int(duration * sample_rate)]  # Ensure length matches
+            y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+            combined_data += y
+
+        # Include algorithmic composition
+        if algorithmic_composition and composition_type is not None:
+            data = generate_algorithmic_composition(duration, sample_rate, composition_type)
+            data = data / np.max(np.abs(data) + 1e-7)
             combined_data += data
 
         # Normalize combined data
         combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
-        
+
         # Apply amplitude
         combined_data *= amplitude
 
@@ -415,13 +550,13 @@ def main():
         buffer = io.BytesIO()
         write(buffer, sample_rate, combined_data)
         buffer.seek(0)
-        
+
         # Play audio
         st.audio(buffer, format='audio/wav')
-        
+
         # Provide download button
         st.download_button(label="💾 Download WAV", data=buffer, file_name="industrial_noise.wav", mime="audio/wav")
-        
+
         # Plot waveform
         st.markdown("#### 📈 Waveform")
         fig_waveform, ax = plt.subplots()
@@ -437,7 +572,7 @@ def main():
         if channels == "Stereo":
             ax.legend()
         st.pyplot(fig_waveform)
-        
+
         # Plot spectrum
         st.markdown("#### 📊 Frequency Spectrum")
         fig_spectrum, ax = plt.subplots()
@@ -452,7 +587,7 @@ def main():
         ax.set_ylabel("Magnitude")
         ax.grid(True)
         st.pyplot(fig_spectrum)
-        
+
         # Plot spectrogram
         st.markdown("#### 🎼 Spectrogram")
         fig_spectrogram, ax = plt.subplots()
@@ -461,7 +596,7 @@ def main():
         ax.set_title('Spectrogram')
         fig_spectrogram.colorbar(img, ax=ax, format="%+2.0f dB")
         st.pyplot(fig_spectrogram)
-    
+
     else:
         st.write("Adjust parameters and click **Generate Noise** to create your industrial noise sample.")
 
