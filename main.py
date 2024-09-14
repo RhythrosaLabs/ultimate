@@ -1,5 +1,3 @@
-# Industrial Noise Generator Pro Max with Variations
-
 import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write
@@ -17,6 +15,12 @@ warnings.filterwarnings('ignore')
 # For file management
 import os
 import pickle
+import tempfile
+import zipfile
+
+# For interactive plots
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Set page configuration
 st.set_page_config(
@@ -94,11 +98,14 @@ st.title("🎹 Industrial Noise Generator Pro Max with Variations")
 st.markdown("""
 Welcome to the **Industrial Noise Generator Pro Max with Variations**! This app allows you to generate multiple industrial noise samples with advanced features:
 
+- **Signal Flow Customization:** Reroute effects and components in any order.
 - **BPM Customization:** Set beats per minute for rhythm-based noise.
 - **Note and Scale Selection:** Choose notes and scales for the synthesizer.
 - **Built-in Synthesizer:** Create unique sounds with various waveforms.
-- **Advanced Effects:** Apply reverb, delay, distortion, and more.
+- **Advanced Effects:** Apply reverb, delay, distortion, and more in any order.
 - **Variations:** Automatically generate variations for each sample.
+- **Interactive Waveform Editor:** Zoom, pan, and interact with your waveform.
+- **Session Management:** Store and download all your generated sounds.
 
 **Get started by adjusting the parameters in the sidebar and click "Generate Noise" to create your samples!**
 """)
@@ -157,7 +164,7 @@ def set_preset(preset):
             'arpeggiation': False,
             'sequencer': False,
             'sequence_pattern': 'Random',
-            'effects': [],
+            'effects_chain': [],
             'effect_params': {},
             'voice_changer': False,
             'pitch_shift_semitones': 0,
@@ -201,7 +208,7 @@ def set_preset(preset):
             'arpeggiation': True,
             'sequencer': True,
             'sequence_pattern': 'Descending',
-            'effects': ["Distortion"],
+            'effects_chain': ["Distortion"],
             'effect_params': {'Distortion': {'gain': 30.0, 'threshold': 0.6}},
             'voice_changer': False,
             'pitch_shift_semitones': 0,
@@ -245,7 +252,7 @@ def set_preset(preset):
             'arpeggiation': False,
             'sequencer': True,
             'sequence_pattern': 'Random',
-            'effects': ["Reverb"],
+            'effects_chain': ["Reverb"],
             'effect_params': {'Reverb': {'decay': 0.7}},
             'voice_changer': False,
             'pitch_shift_semitones': 0,
@@ -289,7 +296,7 @@ def set_preset(preset):
             'arpeggiation': False,
             'sequencer': False,
             'sequence_pattern': 'Random',
-            'effects': ["Tremolo"],
+            'effects_chain': ["Tremolo"],
             'effect_params': {'Tremolo': {'rate': 5.0, 'depth': 0.8}},
             'voice_changer': False,
             'pitch_shift_semitones': 0,
@@ -339,7 +346,7 @@ if preset != "Custom" and preset_params is not None:
     arpeggiation = preset_params.get('arpeggiation', False)
     sequencer = preset_params.get('sequencer', False)
     sequence_pattern = preset_params.get('sequence_pattern', 'Random')
-    effects = preset_params.get('effects', [])
+    effects_chain = preset_params.get('effects_chain', [])
     effect_params = preset_params.get('effect_params', {})
     voice_changer = preset_params.get('voice_changer', False)
     pitch_shift_semitones = preset_params.get('pitch_shift_semitones', 0)
@@ -609,16 +616,24 @@ else:
         )
     else:
         sequence_pattern = 'Random'
-    st.sidebar.subheader("🎚️ Effects")
-    effect_options = ["Reverb", "Delay", "Distortion", "Tremolo"]
-    effects = st.sidebar.multiselect(
-        "Select Effects",
-        effect_options,
-        help="Choose effects to apply."
-    )
+    st.sidebar.subheader("🎚️ Effects Chain")
+    effect_options = ["None", "Reverb", "Delay", "Distortion", "Tremolo", "Chorus", "Flanger", "Phaser", "Compression", "EQ", "Pitch Shifter", "High-pass Filter", "Low-pass Filter", "Vibrato", "Auto-pan"]
+    effects_chain = []
+    for i in range(1, 6):
+        effect = st.sidebar.selectbox(
+            f"Effect Slot {i}",
+            effect_options,
+            index=0,
+            key=f"effect_slot_{i}",
+            help="Select an effect to apply at this position in the chain."
+        )
+        if effect != "None":
+            effects_chain.append(effect)
+    # Collect parameters for each effect
     effect_params = {}
-    for effect in effects:
+    for effect in effects_chain:
         st.sidebar.markdown(f"**{effect} Parameters**")
+        params = {}
         if effect == "Reverb":
             decay = st.sidebar.slider(
                 "Reverb Decay",
@@ -628,7 +643,7 @@ else:
                 key=f"reverb_decay_{effect}",
                 help="Set the decay time for the reverb effect."
             )
-            effect_params['Reverb'] = {'decay': decay}
+            params['decay'] = decay
         elif effect == "Delay":
             delay_time = st.sidebar.slider(
                 "Delay Time (seconds)",
@@ -646,7 +661,8 @@ else:
                 key=f"delay_feedback_{effect}",
                 help="Set the feedback level for the delay effect."
             )
-            effect_params['Delay'] = {'delay_time': delay_time, 'feedback': feedback}
+            params['delay_time'] = delay_time
+            params['feedback'] = feedback
         elif effect == "Distortion":
             gain = st.sidebar.slider(
                 "Distortion Gain",
@@ -664,7 +680,8 @@ else:
                 key=f"distortion_threshold_{effect}",
                 help="Set the threshold for the distortion effect."
             )
-            effect_params['Distortion'] = {'gain': gain, 'threshold': threshold}
+            params['gain'] = gain
+            params['threshold'] = threshold
         elif effect == "Tremolo":
             rate = st.sidebar.slider(
                 "Tremolo Rate (Hz)",
@@ -682,7 +699,159 @@ else:
                 key=f"tremolo_depth_{effect}",
                 help="Set the depth for the tremolo effect."
             )
-            effect_params['Tremolo'] = {'rate': rate, 'depth': depth}
+            params['rate'] = rate
+            params['depth'] = depth
+        elif effect == "Chorus":
+            rate = st.sidebar.slider(
+                "Chorus Rate (Hz)",
+                0.1,
+                5.0,
+                1.5,
+                key=f"chorus_rate_{effect}",
+                help="Set the rate for the chorus effect."
+            )
+            depth = st.sidebar.slider(
+                "Chorus Depth",
+                0.0,
+                1.0,
+                0.5,
+                key=f"chorus_depth_{effect}",
+                help="Set the depth for the chorus effect."
+            )
+            params['rate'] = rate
+            params['depth'] = depth
+        elif effect == "Flanger":
+            rate = st.sidebar.slider(
+                "Flanger Rate (Hz)",
+                0.1,
+                5.0,
+                0.5,
+                key=f"flanger_rate_{effect}",
+                help="Set the rate for the flanger effect."
+            )
+            depth = st.sidebar.slider(
+                "Flanger Depth",
+                0.0,
+                1.0,
+                0.7,
+                key=f"flanger_depth_{effect}",
+                help="Set the depth for the flanger effect."
+            )
+            params['rate'] = rate
+            params['depth'] = depth
+        elif effect == "Phaser":
+            rate = st.sidebar.slider(
+                "Phaser Rate (Hz)",
+                0.1,
+                5.0,
+                0.5,
+                key=f"phaser_rate_{effect}",
+                help="Set the rate for the phaser effect."
+            )
+            depth = st.sidebar.slider(
+                "Phaser Depth",
+                0.0,
+                1.0,
+                0.7,
+                key=f"phaser_depth_{effect}",
+                help="Set the depth for the phaser effect."
+            )
+            params['rate'] = rate
+            params['depth'] = depth
+        elif effect == "Compression":
+            threshold = st.sidebar.slider(
+                "Compressor Threshold",
+                0.0,
+                1.0,
+                0.5,
+                key=f"compressor_threshold_{effect}",
+                help="Set the threshold for the compressor."
+            )
+            ratio = st.sidebar.slider(
+                "Compressor Ratio",
+                1.0,
+                20.0,
+                2.0,
+                key=f"compressor_ratio_{effect}",
+                help="Set the ratio for the compressor."
+            )
+            params['threshold'] = threshold
+            params['ratio'] = ratio
+        elif effect == "EQ":
+            st.sidebar.markdown("**Equalizer Bands**")
+            eq_bands = {}
+            for freq in ['Low', 'Mid', 'High']:
+                gain = st.sidebar.slider(
+                    f"{freq} Gain (dB)",
+                    -12.0,
+                    12.0,
+                    0.0,
+                    key=f"eq_{freq}_{effect}",
+                    help=f"Set the gain for the {freq} frequencies."
+                )
+                eq_bands[freq.lower()] = gain
+            params['bands'] = eq_bands
+        elif effect == "Pitch Shifter":
+            semitones = st.sidebar.slider(
+                "Pitch Shift (semitones)",
+                -24,
+                24,
+                0,
+                key=f"pitch_shift_semitones_{effect}",
+                help="Set the number of semitones to shift the pitch."
+            )
+            params['semitones'] = semitones
+        elif effect == "High-pass Filter":
+            cutoff = st.sidebar.slider(
+                "High-pass Cutoff Frequency (Hz)",
+                20,
+                10000,
+                200,
+                key=f"highpass_cutoff_{effect}",
+                help="Set the cutoff frequency for the high-pass filter."
+            )
+            params['cutoff'] = cutoff
+        elif effect == "Low-pass Filter":
+            cutoff = st.sidebar.slider(
+                "Low-pass Cutoff Frequency (Hz)",
+                1000,
+                20000,
+                5000,
+                key=f"lowpass_cutoff_{effect}",
+                help="Set the cutoff frequency for the low-pass filter."
+            )
+            params['cutoff'] = cutoff
+        elif effect == "Vibrato":
+            rate = st.sidebar.slider(
+                "Vibrato Rate (Hz)",
+                0.1,
+                10.0,
+                5.0,
+                key=f"vibrato_rate_{effect}",
+                help="Set the rate for the vibrato effect."
+            )
+            depth = st.sidebar.slider(
+                "Vibrato Depth",
+                0.0,
+                1.0,
+                0.5,
+                key=f"vibrato_depth_{effect}",
+                help="Set the depth for the vibrato effect."
+            )
+            params['rate'] = rate
+            params['depth'] = depth
+        elif effect == "Auto-pan":
+            rate = st.sidebar.slider(
+                "Auto-pan Rate (Hz)",
+                0.1,
+                10.0,
+                1.0,
+                key=f"autopan_rate_{effect}",
+                help="Set the rate for the auto-pan effect."
+            )
+            params['rate'] = rate
+        effect_params[effect] = params
+
     st.sidebar.subheader("🎤 Voice Changer")
     voice_changer = st.sidebar.checkbox(
         "Enable Voice Changer (Pitch Shift)",
@@ -731,9 +900,6 @@ for waveform_type in waveform_types:
         help=f"Set the frequency for the {waveform_type.lower()}."
     )
     waveform_frequencies[waveform_type] = frequency
-
-# Functions to generate noise and effects (same as your original code)
-# ... [Insert all your function definitions here without changes] ...
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -1060,6 +1226,91 @@ def apply_sequencer(data, sample_rate, pattern='Random'):
     sequenced_data = np.concatenate(sequences)
     return sequenced_data
 
+def apply_chorus(data, sample_rate, rate=1.5, depth=0.5):
+    # Simple chorus effect
+    delay_samples = int((1 / rate) * sample_rate)
+    modulated_delay = depth * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
+    delayed_data = np.zeros_like(data)
+    for i in range(len(data)):
+        delay = int(delay_samples * (1 + modulated_delay[i]))
+        if i - delay >= 0:
+            delayed_data[i] = data[i - delay]
+    return data + delayed_data
+
+def apply_flanger(data, sample_rate, rate=0.5, depth=0.7):
+    # Simple flanger effect
+    delay_samples = int(0.001 * sample_rate)  # 1 ms delay
+    modulated_delay = depth * delay_samples * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
+    flanged_data = np.zeros_like(data)
+    for i in range(len(data)):
+        delay = int(modulated_delay[i])
+        if i - delay >= 0:
+            flanged_data[i] = data[i] + data[i - delay]
+        else:
+            flanged_data[i] = data[i]
+    return flanged_data
+
+def apply_phaser(data, sample_rate, rate=0.5, depth=0.7):
+    # Simple phaser effect
+    phaser_data = np.copy(data)
+    phase = depth * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
+    phaser_data = np.sin(2 * np.pi * phaser_data + phase)
+    return phaser_data
+
+def apply_compression(data, threshold=0.5, ratio=2.0):
+    # Simple compression effect
+    compressed_data = np.copy(data)
+    over_threshold = np.abs(compressed_data) > threshold
+    compressed_data[over_threshold] = threshold + (compressed_data[over_threshold] - threshold) / ratio
+    compressed_data[compressed_data < -threshold] = -threshold + (compressed_data[compressed_data < -threshold] + threshold) / ratio
+    return compressed_data
+
+def apply_eq(data, sample_rate, bands):
+    # Simple 3-band EQ
+    eq_data = np.copy(data)
+    # Low frequencies (20 Hz - 250 Hz)
+    b, a = butter(2, [20 / (0.5 * sample_rate), 250 / (0.5 * sample_rate)], btype='band')
+    low = lfilter(b, a, data) * (10 ** (bands['low'] / 20))
+    # Mid frequencies (250 Hz - 4 kHz)
+    b, a = butter(2, [250 / (0.5 * sample_rate), 4000 / (0.5 * sample_rate)], btype='band')
+    mid = lfilter(b, a, data) * (10 ** (bands['mid'] / 20))
+    # High frequencies (4 kHz - 20 kHz)
+    b, a = butter(2, [4000 / (0.5 * sample_rate), 20000 / (0.5 * sample_rate)], btype='band')
+    high = lfilter(b, a, data) * (10 ** (bands['high'] / 20))
+    eq_data = low + mid + high
+    return eq_data
+
+def apply_pitch_shift(data, sample_rate, semitones):
+    # Pitch shifting using librosa
+    return librosa.effects.pitch_shift(data, sample_rate, n_steps=semitones)
+
+def apply_highpass_filter(data, sample_rate, cutoff):
+    # High-pass filter
+    b, a = butter(2, cutoff / (0.5 * sample_rate), btype='high')
+    return lfilter(b, a, data)
+
+def apply_lowpass_filter(data, sample_rate, cutoff):
+    # Low-pass filter
+    b, a = butter(2, cutoff / (0.5 * sample_rate), btype='low')
+    return lfilter(b, a, data)
+
+def apply_vibrato(data, sample_rate, rate=5.0, depth=0.5):
+    # Vibrato effect
+    t = np.arange(len(data))
+    vibrato = np.sin(2 * np.pi * rate * t / sample_rate)
+    indices = t + depth * vibrato * sample_rate
+    indices = np.clip(indices, 0, len(data) - 1).astype(int)
+    return data[indices]
+
+def apply_autopan(data, sample_rate, rate=1.0):
+    # Auto-pan effect
+    t = np.arange(len(data)) / sample_rate
+    pan = 0.5 * (1 + np.sin(2 * np.pi * rate * t))
+    left = data * pan
+    right = data * (1 - pan)
+    stereo_data = np.vstack((left, right)).T
+    return stereo_data
+
 # File library functions
 def save_preset(params, name):
     if not os.path.exists('presets'):
@@ -1131,7 +1382,7 @@ def main():
             'arpeggiation': arpeggiation,
             'sequencer': sequencer,
             'sequence_pattern': sequence_pattern,
-            'effects': effects,
+            'effects_chain': effects_chain,
             'effect_params': effect_params,
             'voice_changer': voice_changer,
             'pitch_shift_semitones': pitch_shift_semitones,
@@ -1163,6 +1414,11 @@ def main():
 
     st.markdown("---")
     st.header("🛠️ Generate Your Noise Samples")
+
+    # Initialize session state for temporary directory
+    if 'temp_dir' not in st.session_state:
+        st.session_state['temp_dir'] = tempfile.TemporaryDirectory()
+        st.session_state['generated_files'] = []
 
     if st.button("🎶 Generate Noise"):
         progress_bar = st.progress(0)
@@ -1382,8 +1638,8 @@ def main():
                 combined_data = apply_sequencer(combined_data, sample_rate, pattern=sequence_pattern)
                 plot_data = apply_sequencer(plot_data, sample_rate, pattern=sequence_pattern)
 
-            # Apply other effects with varied parameters
-            for effect in effects:
+            # Apply effects in chain order
+            for effect in effects_chain:
                 params = varied_effect_params.get(effect, {})
                 if effect == "Reverb":
                     combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
@@ -1397,107 +1653,104 @@ def main():
                 elif effect == "Tremolo":
                     combined_data = apply_tremolo(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
                     plot_data = apply_tremolo(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                elif effect == "Chorus":
+                    combined_data = apply_chorus(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    plot_data = apply_chorus(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                elif effect == "Flanger":
+                    combined_data = apply_flanger(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    plot_data = apply_flanger(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                elif effect == "Phaser":
+                    combined_data = apply_phaser(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    plot_data = apply_phaser(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                elif effect == "Compression":
+                    combined_data = apply_compression(combined_data, threshold=params['threshold'], ratio=params['ratio'])
+                    plot_data = apply_compression(plot_data, threshold=params['threshold'], ratio=params['ratio'])
+                elif effect == "EQ":
+                    combined_data = apply_eq(combined_data, sample_rate, params['bands'])
+                    plot_data = apply_eq(plot_data, sample_rate, params['bands'])
+                elif effect == "Pitch Shifter":
+                    combined_data = apply_pitch_shift(combined_data, sample_rate, params['semitones'])
+                    plot_data = apply_pitch_shift(plot_data, sample_rate, params['semitones'])
+                elif effect == "High-pass Filter":
+                    combined_data = apply_highpass_filter(combined_data, sample_rate, params['cutoff'])
+                    plot_data = apply_highpass_filter(plot_data, sample_rate, params['cutoff'])
+                elif effect == "Low-pass Filter":
+                    combined_data = apply_lowpass_filter(combined_data, sample_rate, params['cutoff'])
+                    plot_data = apply_lowpass_filter(plot_data, sample_rate, params['cutoff'])
+                elif effect == "Vibrato":
+                    combined_data = apply_vibrato(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    plot_data = apply_vibrato(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                elif effect == "Auto-pan":
+                    combined_data = apply_autopan(combined_data, sample_rate, rate=params['rate'])
+                    plot_data = apply_autopan(plot_data, sample_rate, rate=params['rate'])
 
-            # Adjust bit depth on combined_data (not on plot_data)
+            # Adjust bit depth
             combined_data = adjust_bit_depth(combined_data, bit_depth)
+            plot_data = adjust_bit_depth(plot_data, bit_depth)
 
-            # Handle stereo or mono for combined_data
+            # Apply panning for stereo output
             if channels == "Stereo":
                 combined_data = pan_stereo(combined_data, panning)
-            else:
-                combined_data = combined_data.reshape(-1, 1)
-
-            # Handle stereo or mono for plot_data
-            if channels == "Stereo":
                 plot_data = pan_stereo(plot_data, panning)
-            else:
-                plot_data = plot_data.reshape(-1, 1)
 
-            # Convert combined_data to proper dtype for saving
-            if bit_depth == 16:
-                dtype = np.int16
-                max_int = np.iinfo(dtype).max
-                combined_data = combined_data * max_int
-                combined_data = combined_data.astype(dtype)
-            elif bit_depth == 24:
-                # 24-bit WAV files are supported by soundfile library
-                dtype = 'int24'
-                combined_data = combined_data * (2**23 - 1)
-                combined_data = combined_data.astype(np.int32)
-            else:  # 32-bit
-                dtype = np.float32
-                combined_data = combined_data.astype(dtype)
+            # Normalize audio again after all processing
+            combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
+            plot_data = plot_data / np.max(np.abs(plot_data) + 1e-7)
 
-            # Save audio to buffer
-            buffer = io.BytesIO()
-            if bit_depth == 24:
-                # Use soundfile to write 24-bit audio
-                sf.write(buffer, combined_data, sample_rate, subtype='PCM_24')
-            else:
-                write(buffer, sample_rate, combined_data)
-            buffer.seek(0)
+            # Convert to int16 for saving
+            combined_data = (combined_data * 32767).astype(np.int16)
 
-            # Play audio
-            st.audio(buffer, format='audio/wav')
+            # Generate a unique filename
+            filename = f"industrial_noise_{sample_num + 1}.wav"
+            filepath = os.path.join(st.session_state['temp_dir'].name, filename)
 
-            # Provide download button
-            st.download_button(
-                label=f"💾 Download Sample {sample_num + 1}",
-                data=buffer,
-                file_name=f"industrial_noise_{sample_num + 1}.wav",
-                mime="audio/wav"
+            # Save the audio file
+            write(filepath, sample_rate, combined_data)
+            st.session_state['generated_files'].append(filepath)
+
+            # Display audio player
+            st.audio(filepath)
+
+            # Create interactive waveform plot
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(y=plot_data, mode='lines', name='Waveform'))
+            fig.update_layout(
+                title='Interactive Waveform',
+                xaxis_title='Sample',
+                yaxis_title='Amplitude',
+                height=400,
+                margin=dict(l=0, r=0, t=30, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Create spectrogram
+            D = librosa.stft(plot_data)
+            S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+            fig, ax = plt.subplots(figsize=(10, 4))
+            img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax)
+            fig.colorbar(img, ax=ax, format='%+2.0f dB')
+            ax.set_title('Spectrogram')
+            st.pyplot(fig)
+
+            # Update progress
+            progress_bar.progress((sample_num + 1) / num_samples)
+
+        status_text.text("All samples generated!")
+
+    # Download all generated files as a zip
+    if st.session_state['generated_files']:
+        zip_filename = "industrial_noise_samples.zip"
+        with zipfile.ZipFile(zip_filename, 'w') as zipf:
+            for file in st.session_state['generated_files']:
+                zipf.write(file, os.path.basename(file))
+        
+        with open(zip_filename, "rb") as f:
+            btn = st.download_button(
+                label="Download All Samples",
+                data=f.read(),
+                file_name=zip_filename,
+                mime="application/zip"
             )
 
-            # Plot waveform
-            st.markdown("#### 📈 Waveform")
-            fig_waveform, ax = plt.subplots()
-            times = np.linspace(0, duration, len(plot_data))
-            if channels == "Stereo":
-                ax.plot(times, plot_data[:, 0], label='Left Channel', color='steelblue')
-                ax.plot(times, plot_data[:, 1], label='Right Channel', color='darkorange')
-            else:
-                ax.plot(times, plot_data.flatten(), color='steelblue')
-            ax.set_xlabel("Time [s]")
-            ax.set_ylabel("Amplitude")
-            ax.grid(True)
-            if channels == "Stereo":
-                ax.legend()
-            st.pyplot(fig_waveform)
-
-            # Plot spectrum
-            st.markdown("#### 📊 Frequency Spectrum")
-            fig_spectrum, ax = plt.subplots()
-            if channels == "Stereo":
-                data_mono = plot_data.mean(axis=1)
-            else:
-                data_mono = plot_data.flatten()
-            freqs = np.fft.rfftfreq(len(data_mono), 1 / sample_rate)
-            fft_magnitude = np.abs(np.fft.rfft(data_mono))
-            ax.semilogx(freqs, fft_magnitude, color='darkorange')
-            ax.set_xlabel("Frequency [Hz]")
-            ax.set_ylabel("Magnitude")
-            ax.grid(True)
-            st.pyplot(fig_spectrum)
-
-            # Plot spectrogram
-            st.markdown("#### 🎼 Spectrogram")
-            fig_spectrogram, ax = plt.subplots()
-            D = librosa.amplitude_to_db(np.abs(librosa.stft(data_mono)), ref=np.max)
-            img = librosa.display.specshow(D, sr=sample_rate, x_axis='time', y_axis='log', ax=ax)
-            ax.set_title('Spectrogram')
-            fig_spectrogram.colorbar(img, ax=ax, format="%+2.0f dB")
-            st.pyplot(fig_spectrogram)
-
-            st.markdown("---")  # Separator between samples
-            progress = int(((sample_num + 1) / num_samples) * 100)
-            progress_bar.progress(progress)
-
-        status_text.text("Noise generation complete!")
-        st.balloons()
-    else:
-        st.write("Adjust parameters and click **Generate Noise** to create your industrial noise samples.")
-
-# Run the app
 if __name__ == "__main__":
     main()
-
