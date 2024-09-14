@@ -1172,11 +1172,10 @@ def main():
             st.markdown(f"### Sample {sample_num + 1}")
             # Generate noise based on selection
             total_samples = int(duration * sample_rate)
-            combined_data = np.zeros(total_samples)
+            combined_data = np.zeros(total_samples, dtype=np.float32)  # Ensure float type
 
             # Introduce slight variations for each sample
             variation_factor = 0.05  # 5% variation
-            varied_params = {}
 
             # Vary frequency parameters
             frequency_variation = random.uniform(1 - variation_factor, 1 + variation_factor)
@@ -1213,13 +1212,20 @@ def main():
                 elif noise_type == "Grey Noise":
                     data = generate_grey_noise(duration, sample_rate)
                 else:
-                    data = np.zeros(total_samples)
+                    data = np.zeros(total_samples, dtype=np.float32)
 
                 # Apply filter with varied parameters
                 data = apply_filter(data, varied_lowcut, varied_highcut, sample_rate, order)
 
                 # Normalize audio
                 data = data / np.max(np.abs(data) + 1e-7)
+                data = data.astype(np.float32)  # Ensure float type
+
+                # Adjust lengths if necessary
+                if len(data) != len(combined_data):
+                    min_length = min(len(data), len(combined_data))
+                    data = data[:min_length]
+                    combined_data = combined_data[:min_length]
 
                 # Combine noises
                 combined_data += data
@@ -1234,13 +1240,21 @@ def main():
                 data = apply_filter(data, varied_lowcut, varied_highcut, sample_rate, order)
                 # Normalize audio
                 data = data / np.max(np.abs(data) + 1e-7)
+                data = data.astype(np.float32)  # Ensure float type
+
+                # Adjust lengths if necessary
+                if len(data) != len(combined_data):
+                    min_length = min(len(data), len(combined_data))
+                    data = data[:min_length]
+                    combined_data = combined_data[:min_length]
+
                 # Combine waveforms
                 combined_data += data
 
             # Synthesizer
             if synth_enabled:
                 envelope = generate_envelope(total_samples, sample_rate, synth_attack, synth_decay, synth_sustain, synth_release)
-                synth_data = np.zeros(total_samples)
+                synth_data = np.zeros(total_samples, dtype=np.float32)
                 for note in synth_notes:
                     # Apply variation to note frequency
                     note_freq = note_to_freq(note) * frequency_variation
@@ -1248,6 +1262,14 @@ def main():
                     tone = generate_synth_tone_from_freq(note_freq, duration, sample_rate, waveform=synth_waveform, envelope=envelope)
                     synth_data += tone
                 synth_data = synth_data / np.max(np.abs(synth_data) + 1e-7)
+                synth_data = synth_data.astype(np.float32)  # Ensure float type
+
+                # Adjust lengths if necessary
+                if len(synth_data) != len(combined_data):
+                    min_length = min(len(synth_data), len(combined_data))
+                    synth_data = synth_data[:min_length]
+                    combined_data = combined_data[:min_length]
+
                 combined_data += synth_data
 
             # Include uploaded audio file
@@ -1257,6 +1279,14 @@ def main():
                 y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
                 y = y[:total_samples]  # Ensure length matches
                 y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+                y = y.astype(np.float32)  # Ensure float type
+
+                # Adjust lengths if necessary
+                if len(y) != len(combined_data):
+                    min_length = min(len(y), len(combined_data))
+                    y = y[:min_length]
+                    combined_data = combined_data[:min_length]
+
                 combined_data += y
 
             # Voice changer feature
@@ -1272,12 +1302,28 @@ def main():
                 else:
                     y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
                 y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
+                y_shifted = y_shifted.astype(np.float32)  # Ensure float type
+
+                # Adjust lengths if necessary
+                if len(y_shifted) != len(combined_data):
+                    min_length = min(len(y_shifted), len(combined_data))
+                    y_shifted = y_shifted[:min_length]
+                    combined_data = combined_data[:min_length]
+
                 combined_data += y_shifted
 
             # Include algorithmic composition
             if algorithmic_composition and composition_type is not None:
                 data = generate_algorithmic_composition(duration, sample_rate, composition_type)
                 data = data / np.max(np.abs(data) + 1e-7)
+                data = data.astype(np.float32)  # Ensure float type
+
+                # Adjust lengths if necessary
+                if len(data) != len(combined_data):
+                    min_length = min(len(data), len(combined_data))
+                    data = data[:min_length]
+                    combined_data = combined_data[:min_length]
+
                 combined_data += data
 
             # Normalize combined data
@@ -1407,8 +1453,8 @@ def main():
             fig_waveform, ax = plt.subplots()
             times = np.linspace(0, duration, len(plot_data))
             if channels == "Stereo":
-                ax.plot(times, plot_data[:,0], label='Left Channel', color='steelblue')
-                ax.plot(times, plot_data[:,1], label='Right Channel', color='darkorange')
+                ax.plot(times, plot_data[:, 0], label='Left Channel', color='steelblue')
+                ax.plot(times, plot_data[:, 1], label='Right Channel', color='darkorange')
             else:
                 ax.plot(times, plot_data.flatten(), color='steelblue')
             ax.set_xlabel("Time [s]")
@@ -1425,7 +1471,7 @@ def main():
                 data_mono = plot_data.mean(axis=1)
             else:
                 data_mono = plot_data.flatten()
-            freqs = np.fft.rfftfreq(len(data_mono), 1/sample_rate)
+            freqs = np.fft.rfftfreq(len(data_mono), 1 / sample_rate)
             fft_magnitude = np.abs(np.fft.rfft(data_mono))
             ax.semilogx(freqs, fft_magnitude, color='darkorange')
             ax.set_xlabel("Frequency [Hz]")
@@ -1454,3 +1500,4 @@ def main():
 # Run the app
 if __name__ == "__main__":
     main()
+
