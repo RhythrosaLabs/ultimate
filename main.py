@@ -480,6 +480,29 @@ def apply_amplitude_modulation(data, sample_rate, mod_freq=5.0):
     modulator = np.sin(2 * np.pi * mod_freq * t)
     return data * modulator
 
+def apply_fade(data, sample_rate, fade_in, fade_out):
+    # Apply fade in/out
+    total_samples = len(data)
+    fade_in_samples = int(fade_in * sample_rate)
+    fade_out_samples = int(fade_out * sample_rate)
+
+    # Apply fade-in if applicable
+    if fade_in_samples > 0:
+        fade_in_curve = np.linspace(0, 1, fade_in_samples)
+        if data.ndim > 1:
+            fade_in_curve = fade_in_curve[:, np.newaxis]
+        data[:fade_in_samples] *= fade_in_curve
+
+    # Apply fade-out if applicable
+    if fade_out_samples > 0:
+        fade_out_curve = np.linspace(1, 0, fade_out_samples)
+        if data.ndim > 1:
+            fade_out_curve = fade_out_curve[:, np.newaxis]
+        data[-fade_out_samples:] *= fade_out_curve
+
+    return data
+
+
 def apply_frequency_modulation(data, sample_rate, mod_freq=5.0, mod_index=2.0):
     # Apply frequency modulation
     t = np.linspace(0, len(data)/sample_rate, num=len(data))
