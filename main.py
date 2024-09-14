@@ -1,4 +1,4 @@
-# Ultimate Industrial Noise Generator with Advanced Features
+# Industrial Noise Generator with BPM, Scales, and Synthesizer
 
 import streamlit as st
 import numpy as np
@@ -20,8 +20,8 @@ import pickle
 
 # Set page configuration
 st.set_page_config(
-    page_title="Industrial Noise Generator Pro Max",
-    page_icon="🔊",
+    page_title="Industrial Noise Generator Pro Max with Synth",
+    page_icon="🎹",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -59,9 +59,9 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Title and description
-st.title("🔊 Industrial Noise Generator Pro Max")
+st.title("🎹 Industrial Noise Generator Pro Max with Synth")
 st.markdown("""
-Generate industrial noise samples with advanced features. Customize parameters to create unique sounds, and leverage powerful tools to supercharge your audio creations!
+Generate industrial noise samples with advanced features, including BPM customization, note and scale selection, and a built-in synthesizer. Customize parameters to create unique sounds, and leverage powerful tools to supercharge your audio creations!
 """)
 
 # Sidebar for parameters
@@ -77,7 +77,10 @@ def set_preset(preset):
     params = {}
     if preset == "Default":
         params = {
+            'duration_type': 'Seconds',
             'duration': 5,
+            'beats': 8,
+            'bpm': 120,
             'noise_types': ["White Noise"],
             'waveform_types': [],
             'lowcut': 100,
@@ -106,107 +109,17 @@ def set_preset(preset):
             'voice_changer': False,
             'pitch_shift_semitones': 0,
             'algorithmic_composition': False,
-            'composition_type': None
+            'composition_type': None,
+            'synth_enabled': False,
+            'synth_notes': ['C4'],
+            'synth_scale': 'Major',
+            'synth_waveform': 'Sine',
+            'synth_attack': 0.01,
+            'synth_decay': 0.1,
+            'synth_sustain': 0.7,
+            'synth_release': 0.2
         }
-    elif preset == "Heavy Machinery":
-        params = {
-            'duration': 10,
-            'noise_types': ["Brown Noise", "Pink Noise"],
-            'waveform_types': ["Square Wave"],
-            'lowcut': 50,
-            'highcut': 2000,
-            'order': 8,
-            'amplitude': 1.0,
-            'sample_rate': 48000,
-            'channels': "Stereo",
-            'fade_in': 1.0,
-            'fade_out': 1.0,
-            'panning': 0.5,
-            'bit_depth': 16,
-            'modulation': "Amplitude Modulation",
-            'uploaded_file': None,
-            'reverse_audio': False,
-            'bitcrusher': True,
-            'bitcrusher_depth': 4,
-            'sample_reduction': True,
-            'sample_reduction_factor': 2,
-            'rhythmic_effects': ["Stutter"],
-            'arpeggiation': True,
-            'sequencer': True,
-            'sequence_pattern': 'Ascending',
-            'effects': ["Reverb", "Delay"],
-            'effect_params': {'Reverb': {'decay': 1.5}, 'Delay': {'delay_time': 0.3, 'feedback': 0.4}},
-            'voice_changer': False,
-            'pitch_shift_semitones': 0,
-            'algorithmic_composition': True,
-            'composition_type': "Random Melody"
-        }
-    elif preset == "Factory Floor":
-        params = {
-            'duration': 8,
-            'noise_types': ["White Noise", "Brown Noise"],
-            'waveform_types': ["Sawtooth Wave"],
-            'lowcut': 150,
-            'highcut': 4000,
-            'order': 4,
-            'amplitude': 0.8,
-            'sample_rate': 48000,
-            'channels': "Mono",
-            'fade_in': 0.5,
-            'fade_out': 0.5,
-            'panning': 0.0,
-            'bit_depth': 24,
-            'modulation': None,
-            'uploaded_file': None,
-            'reverse_audio': False,
-            'bitcrusher': False,
-            'bitcrusher_depth': 8,
-            'sample_reduction': False,
-            'sample_reduction_factor': 1,
-            'rhythmic_effects': ["Glitch"],
-            'arpeggiation': False,
-            'sequencer': True,
-            'sequence_pattern': 'Random',
-            'effects': ["Distortion"],
-            'effect_params': {'Distortion': {'gain': 25.0, 'threshold': 0.5}},
-            'voice_changer': False,
-            'pitch_shift_semitones': 0,
-            'algorithmic_composition': False,
-            'composition_type': None
-        }
-    elif preset == "Electric Hum":
-        params = {
-            'duration': 5,
-            'noise_types': ["Violet Noise"],
-            'waveform_types': ["Sine Wave"],
-            'lowcut': 5000,
-            'highcut': 20000,
-            'order': 6,
-            'amplitude': 0.6,
-            'sample_rate': 48000,
-            'channels': "Mono",
-            'fade_in': 0.2,
-            'fade_out': 0.2,
-            'panning': 0.5,
-            'bit_depth': 16,
-            'modulation': "Frequency Modulation",
-            'uploaded_file': None,
-            'reverse_audio': True,
-            'bitcrusher': True,
-            'bitcrusher_depth': 6,
-            'sample_reduction': True,
-            'sample_reduction_factor': 4,
-            'rhythmic_effects': [],
-            'arpeggiation': True,
-            'sequencer': False,
-            'sequence_pattern': 'Descending',
-            'effects': ["Tremolo"],
-            'effect_params': {'Tremolo': {'rate': 5.0, 'depth': 0.8}},
-            'voice_changer': False,
-            'pitch_shift_semitones': 0,
-            'algorithmic_composition': False,
-            'composition_type': None
-        }
+    # Additional presets can be defined similarly...
     else:  # Custom
         params = None
     return params
@@ -215,7 +128,10 @@ preset_params = set_preset(preset)
 
 if preset != "Custom" and preset_params is not None:
     # Set parameters from preset
+    duration_type = preset_params.get('duration_type', 'Seconds')
     duration = preset_params['duration']
+    beats = preset_params.get('beats', 8)
+    bpm = preset_params.get('bpm', 120)
     noise_types = preset_params.get('noise_types', [])
     waveform_types = preset_params.get('waveform_types', [])
     lowcut = preset_params['lowcut']
@@ -245,10 +161,27 @@ if preset != "Custom" and preset_params is not None:
     pitch_shift_semitones = preset_params.get('pitch_shift_semitones', 0)
     algorithmic_composition = preset_params.get('algorithmic_composition', False)
     composition_type = preset_params.get('composition_type', None)
-    uploaded_file = None
+    synth_enabled = preset_params.get('synth_enabled', False)
+    synth_notes = preset_params.get('synth_notes', ['C4'])
+    synth_scale = preset_params.get('synth_scale', 'Major')
+    synth_waveform = preset_params.get('synth_waveform', 'Sine')
+    synth_attack = preset_params.get('synth_attack', 0.01)
+    synth_decay = preset_params.get('synth_decay', 0.1)
+    synth_sustain = preset_params.get('synth_sustain', 0.7)
+    synth_release = preset_params.get('synth_release', 0.2)
 else:
     # Custom parameters
-    duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
+    duration_type = st.sidebar.selectbox("Duration Type", ["Seconds", "Milliseconds", "Beats"])
+    if duration_type == "Seconds":
+        duration = st.sidebar.slider("Duration (seconds)", min_value=1, max_value=60, value=5)
+    elif duration_type == "Milliseconds":
+        duration_ms = st.sidebar.slider("Duration (milliseconds)", min_value=100, max_value=60000, value=5000)
+        duration = duration_ms / 1000.0  # Convert to seconds
+    elif duration_type == "Beats":
+        bpm = st.sidebar.slider("BPM", min_value=30, max_value=300, value=120)
+        beats = st.sidebar.slider("Number of Beats", min_value=1, max_value=128, value=8)
+        duration = (60 / bpm) * beats  # Convert beats to seconds
+
     noise_options = ["White Noise", "Pink Noise", "Brown Noise", "Blue Noise", "Violet Noise", "Grey Noise"]
     noise_types = st.sidebar.multiselect("Noise Types", noise_options)
     waveform_options = ["Sine Wave", "Square Wave", "Sawtooth Wave", "Triangle Wave"]
@@ -284,6 +217,29 @@ else:
     st.sidebar.subheader("🎚️ Rhythmic Effects")
     rhythmic_effect_options = ["Stutter", "Glitch"]
     rhythmic_effects = st.sidebar.multiselect("Select Rhythmic Effects", rhythmic_effect_options)
+    st.sidebar.subheader("🎹 Synthesizer")
+    synth_enabled = st.sidebar.checkbox("Enable Synthesizer")
+    if synth_enabled:
+        note_options = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        octave_options = [str(i) for i in range(1, 8)]
+        selected_notes = st.sidebar.multiselect("Notes", [note + octave for octave in octave_options for note in note_options], default=['C4'])
+        synth_notes = selected_notes
+        scale_options = ['Major', 'Minor', 'Pentatonic', 'Blues', 'Chromatic']
+        synth_scale = st.sidebar.selectbox("Scale", scale_options)
+        synth_waveform = st.sidebar.selectbox("Waveform", ["Sine", "Square", "Sawtooth", "Triangle"])
+        st.sidebar.markdown("**Envelope**")
+        synth_attack = st.sidebar.slider("Attack", 0.0, 1.0, 0.01)
+        synth_decay = st.sidebar.slider("Decay", 0.0, 1.0, 0.1)
+        synth_sustain = st.sidebar.slider("Sustain", 0.0, 1.0, 0.7)
+        synth_release = st.sidebar.slider("Release", 0.0, 1.0, 0.2)
+    else:
+        synth_notes = ['C4']
+        synth_scale = 'Major'
+        synth_waveform = 'Sine'
+        synth_attack = 0.01
+        synth_decay = 0.1
+        synth_sustain = 0.7
+        synth_release = 0.2
     st.sidebar.subheader("🎹 Arpeggiation")
     arpeggiation = st.sidebar.checkbox("Enable Arpeggiation")
     st.sidebar.subheader("🎛️ Sequencer")
@@ -383,6 +339,23 @@ if st.sidebar.button("🔀 Randomize Parameters"):
             effect_params['Distortion'] = {'gain': random.uniform(1.0, 50.0), 'threshold': random.uniform(0.0, 1.0)}
         elif effect == "Tremolo":
             effect_params['Tremolo'] = {'rate': random.uniform(0.1, 20.0), 'depth': random.uniform(0.0, 1.0)}
+    synth_enabled = random.choice([True, False])
+    if synth_enabled:
+        synth_notes = random.sample(['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4'], random.randint(1, 7))
+        synth_scale = random.choice(['Major', 'Minor', 'Pentatonic', 'Blues', 'Chromatic'])
+        synth_waveform = random.choice(['Sine', 'Square', 'Sawtooth', 'Triangle'])
+        synth_attack = random.uniform(0.0, 1.0)
+        synth_decay = random.uniform(0.0, 1.0)
+        synth_sustain = random.uniform(0.0, 1.0)
+        synth_release = random.uniform(0.0, 1.0)
+    else:
+        synth_notes = ['C4']
+        synth_scale = 'Major'
+        synth_waveform = 'Sine'
+        synth_attack = 0.01
+        synth_decay = 0.1
+        synth_sustain = 0.7
+        synth_release = 0.2
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -449,6 +422,50 @@ def generate_waveform(waveform_type, frequency, duration, sample_rate):
         waveform = np.zeros_like(t)
     return waveform
 
+def generate_synth_tone(note, duration, sample_rate, waveform='Sine', envelope=None):
+    frequency = note_to_freq(note)
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    if waveform == 'Sine':
+        tone = np.sin(2 * np.pi * frequency * t)
+    elif waveform == 'Square':
+        tone = signal.square(2 * np.pi * frequency * t)
+    elif waveform == 'Sawtooth':
+        tone = signal.sawtooth(2 * np.pi * frequency * t)
+    elif waveform == 'Triangle':
+        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    else:
+        tone = np.zeros_like(t)
+    if envelope:
+        tone *= envelope
+    return tone
+
+def note_to_freq(note):
+    # Convert note (e.g., 'A4') to frequency
+    A4_freq = 440.0
+    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F',
+                  'F#', 'G', 'G#', 'A', 'A#', 'B']
+    octave = int(note[-1])
+    key_number = note_names.index(note[:-1])
+    n = key_number + (octave - 4) * 12
+    freq = A4_freq * (2 ** (n / 12))
+    return freq
+
+def generate_envelope(total_samples, sample_rate, attack, decay, sustain, release):
+    envelope = np.zeros(total_samples)
+    attack_samples = int(attack * sample_rate)
+    decay_samples = int(decay * sample_rate)
+    release_samples = int(release * sample_rate)
+    sustain_samples = total_samples - attack_samples - decay_samples - release_samples
+    # Attack
+    envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
+    # Decay
+    envelope[attack_samples:attack_samples+decay_samples] = np.linspace(1, sustain, decay_samples)
+    # Sustain
+    envelope[attack_samples+decay_samples:attack_samples+decay_samples+sustain_samples] = sustain
+    # Release
+    envelope[-release_samples:] = np.linspace(sustain, 0, release_samples)
+    return envelope
+
 def butter_bandpass(lowcut, highcut, fs, order=5):
     # Create a bandpass filter
     nyq = 0.5 * fs
@@ -462,23 +479,6 @@ def apply_filter(data, lowcut, highcut, fs, order=5):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     y = lfilter(b, a, data)
     return y
-
-def apply_fade(data, sample_rate, fade_in, fade_out):
-    # Apply fade in/out
-    total_samples = len(data)
-    fade_in_samples = int(fade_in * sample_rate)
-    fade_out_samples = int(fade_out * sample_rate)
-    fade_in_curve = np.linspace(0, 1, fade_in_samples)
-    fade_out_curve = np.linspace(1, 0, fade_out_samples)
-    data[:fade_in_samples] *= fade_in_curve
-    data[-fade_out_samples:] *= fade_out_curve
-    return data
-
-def apply_amplitude_modulation(data, sample_rate, mod_freq=5.0):
-    # Apply amplitude modulation
-    t = np.linspace(0, len(data)/sample_rate, num=len(data))
-    modulator = np.sin(2 * np.pi * mod_freq * t)
-    return data * modulator
 
 def apply_fade(data, sample_rate, fade_in, fade_out):
     # Apply fade in/out
@@ -502,6 +502,11 @@ def apply_fade(data, sample_rate, fade_in, fade_out):
 
     return data
 
+def apply_amplitude_modulation(data, sample_rate, mod_freq=5.0):
+    # Apply amplitude modulation
+    t = np.linspace(0, len(data)/sample_rate, num=len(data))
+    modulator = np.sin(2 * np.pi * mod_freq * t)
+    return data * modulator
 
 def apply_frequency_modulation(data, sample_rate, mod_freq=5.0, mod_index=2.0):
     # Apply frequency modulation
@@ -692,7 +697,10 @@ def main():
     preset_name = st.sidebar.text_input("Preset Name")
     if st.sidebar.button("Save Preset"):
         current_params = {
+            'duration_type': duration_type,
             'duration': duration,
+            'beats': beats if 'beats' in locals() else None,
+            'bpm': bpm if 'bpm' in locals() else None,
             'noise_types': noise_types,
             'waveform_types': waveform_types,
             'lowcut': lowcut,
@@ -720,7 +728,15 @@ def main():
             'voice_changer': voice_changer,
             'pitch_shift_semitones': pitch_shift_semitones,
             'algorithmic_composition': algorithmic_composition,
-            'composition_type': composition_type
+            'composition_type': composition_type,
+            'synth_enabled': synth_enabled,
+            'synth_notes': synth_notes,
+            'synth_scale': synth_scale,
+            'synth_waveform': synth_waveform,
+            'synth_attack': synth_attack,
+            'synth_decay': synth_decay,
+            'synth_sustain': synth_sustain,
+            'synth_release': synth_release
         }
         save_preset(current_params, preset_name)
         st.sidebar.success(f"Preset '{preset_name}' saved!")
@@ -736,7 +752,8 @@ def main():
 
     if st.button("🎶 Generate Noise"):
         # Generate noise based on selection
-        combined_data = np.zeros(int(duration * sample_rate))
+        total_samples = int(duration * sample_rate)
+        combined_data = np.zeros(total_samples)
 
         # Generate noise types
         for noise_type in noise_types:
@@ -753,7 +770,7 @@ def main():
             elif noise_type == "Grey Noise":
                 data = generate_grey_noise(duration, sample_rate)
             else:
-                data = np.zeros(int(duration * sample_rate))
+                data = np.zeros(total_samples)
 
             # Apply filter
             data = apply_filter(data, lowcut, highcut, sample_rate, order)
@@ -775,12 +792,22 @@ def main():
             # Combine waveforms
             combined_data += data
 
+        # Synthesizer
+        if synth_enabled:
+            envelope = generate_envelope(total_samples, sample_rate, synth_attack, synth_decay, synth_sustain, synth_release)
+            synth_data = np.zeros(total_samples)
+            for note in synth_notes:
+                tone = generate_synth_tone(note, duration, sample_rate, waveform=synth_waveform, envelope=envelope)
+                synth_data += tone
+            synth_data = synth_data / np.max(np.abs(synth_data) + 1e-7)
+            combined_data += synth_data
+
         # Include uploaded audio file
         if uploaded_file is not None:
             audio_bytes = uploaded_file.read()
             # Load the uploaded file
             y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
-            y = y[:int(duration * sample_rate)]  # Ensure length matches
+            y = y[:total_samples]  # Ensure length matches
             y = y / np.max(np.abs(y) + 1e-7)  # Normalize
             combined_data += y
 
@@ -792,10 +819,10 @@ def main():
             # Pitch shift by specified semitones
             y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
             # Ensure length matches
-            if len(y_shifted) > len(combined_data):
-                y_shifted = y_shifted[:len(combined_data)]
+            if len(y_shifted) > total_samples:
+                y_shifted = y_shifted[:total_samples]
             else:
-                y_shifted = np.pad(y_shifted, (0, len(combined_data) - len(y_shifted)), 'constant')
+                y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
             y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
             combined_data += y_shifted
 
