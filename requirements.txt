@@ -14,3 +14,4 @@ midiutil
 python-dotenv
 librosa
 soundfile
+tensorflow
