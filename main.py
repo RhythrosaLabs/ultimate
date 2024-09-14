@@ -1,4 +1,4 @@
-# Industrial Noise Generator with BPM, Scales, and Synthesizer
+# Industrial Noise Generator Pro Max with Variations
 
 import streamlit as st
 import numpy as np
@@ -20,7 +20,7 @@ import pickle
 
 # Set page configuration
 st.set_page_config(
-    page_title="Industrial Noise Generator Pro Max with Synth",
+    page_title="Industrial Noise Generator Pro Max with Variations",
     page_icon="🎹",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -59,13 +59,17 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Title and description
-st.title("🎹 Industrial Noise Generator Pro Max with Synth")
+st.title("🎹 Industrial Noise Generator Pro Max with Variations")
 st.markdown("""
-Generate industrial noise samples with advanced features, including BPM customization, note and scale selection, and a built-in synthesizer. Customize parameters to create unique sounds, and leverage powerful tools to supercharge your audio creations!
+Generate multiple industrial noise samples with advanced features, including BPM customization, note and scale selection, and a built-in synthesizer. Customize parameters to create unique sounds, and generate variations automatically!
 """)
 
 # Sidebar for parameters
 st.sidebar.header("🎛️ Controls")
+
+# Number of samples to generate
+st.sidebar.subheader("🔢 Sample Generation")
+num_samples = st.sidebar.number_input("Number of Samples to Generate", min_value=1, max_value=100, value=1)
 
 # Presets
 st.sidebar.subheader("🎚️ Presets")
@@ -220,7 +224,8 @@ else:
     st.sidebar.subheader("🎹 Synthesizer")
     synth_enabled = st.sidebar.checkbox("Enable Synthesizer")
     if synth_enabled:
-        note_options = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        note_options = ['C', 'C#', 'D', 'D#', 'E', 'F',
+                        'F#', 'G', 'G#', 'A', 'A#', 'B']
         octave_options = [str(i) for i in range(1, 8)]
         selected_notes = st.sidebar.multiselect("Notes", [note + octave for octave in octave_options for note in note_options], default=['C4'])
         synth_notes = selected_notes
@@ -285,77 +290,6 @@ else:
         composition_type = st.sidebar.selectbox("Composition Type", composition_options)
     else:
         composition_type = None
-
-# Randomize button
-if st.sidebar.button("🔀 Randomize Parameters"):
-    duration = random.randint(1, 60)
-    noise_types = random.sample(noise_options, random.randint(0, len(noise_options)))
-    waveform_types = random.sample(waveform_options, random.randint(0, len(waveform_options)))
-    lowcut = random.randint(20, 10000)
-    highcut = random.randint(lowcut + 100, 24000)
-    order = random.randint(1, 10)
-    amplitude = random.uniform(0.0, 1.0)
-    sample_rate = random.choice([48000, 44100, 32000, 22050, 16000, 8000])
-    channels = random.choice(["Mono", "Stereo"])
-    fade_in = random.uniform(0.0, 5.0)
-    fade_out = random.uniform(0.0, 5.0)
-    panning = random.uniform(0.0, 1.0)
-    bit_depth = random.choice([16, 24, 32])
-    modulation = random.choice([None, "Amplitude Modulation", "Frequency Modulation"])
-    algorithmic_composition = random.choice([True, False])
-    if algorithmic_composition:
-        composition_type = random.choice(["Random Melody", "Ambient Soundscape", "Rhythmic Pattern"])
-    else:
-        composition_type = None
-    reverse_audio = random.choice([True, False])
-    bitcrusher = random.choice([True, False])
-    if bitcrusher:
-        bitcrusher_depth = random.randint(1, 16)
-    else:
-        bitcrusher_depth = 16
-    sample_reduction = random.choice([True, False])
-    if sample_reduction:
-        sample_reduction_factor = random.randint(1, 16)
-    else:
-        sample_reduction_factor = 1
-    rhythmic_effects = random.sample(rhythmic_effect_options, random.randint(0, len(rhythmic_effect_options)))
-    arpeggiation = random.choice([True, False])
-    sequencer = random.choice([True, False])
-    if sequencer:
-        sequence_pattern = random.choice(['Ascending', 'Descending', 'Random'])
-    else:
-        sequence_pattern = 'Random'
-    voice_changer = random.choice([True, False])
-    if voice_changer:
-        pitch_shift_semitones = random.randint(-24, 24)
-    effects = random.sample(effect_options, random.randint(0, len(effect_options)))
-    effect_params = {}
-    for effect in effects:
-        if effect == "Reverb":
-            effect_params['Reverb'] = {'decay': random.uniform(0.1, 2.0)}
-        elif effect == "Delay":
-            effect_params['Delay'] = {'delay_time': random.uniform(0.1, 1.0), 'feedback': random.uniform(0.0, 1.0)}
-        elif effect == "Distortion":
-            effect_params['Distortion'] = {'gain': random.uniform(1.0, 50.0), 'threshold': random.uniform(0.0, 1.0)}
-        elif effect == "Tremolo":
-            effect_params['Tremolo'] = {'rate': random.uniform(0.1, 20.0), 'depth': random.uniform(0.0, 1.0)}
-    synth_enabled = random.choice([True, False])
-    if synth_enabled:
-        synth_notes = random.sample(['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4'], random.randint(1, 7))
-        synth_scale = random.choice(['Major', 'Minor', 'Pentatonic', 'Blues', 'Chromatic'])
-        synth_waveform = random.choice(['Sine', 'Square', 'Sawtooth', 'Triangle'])
-        synth_attack = random.uniform(0.0, 1.0)
-        synth_decay = random.uniform(0.0, 1.0)
-        synth_sustain = random.uniform(0.0, 1.0)
-        synth_release = random.uniform(0.0, 1.0)
-    else:
-        synth_notes = ['C4']
-        synth_scale = 'Major'
-        synth_waveform = 'Sine'
-        synth_attack = 0.01
-        synth_decay = 0.1
-        synth_sustain = 0.7
-        synth_release = 0.2
 
 # Functions to generate noise
 def generate_white_noise(duration, sample_rate):
@@ -456,6 +390,8 @@ def generate_envelope(total_samples, sample_rate, attack, decay, sustain, releas
     decay_samples = int(decay * sample_rate)
     release_samples = int(release * sample_rate)
     sustain_samples = total_samples - attack_samples - decay_samples - release_samples
+    # Ensure no negative values
+    sustain_samples = max(sustain_samples, 0)
     # Attack
     envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
     # Decay
@@ -690,6 +626,23 @@ def list_presets():
     else:
         return []
 
+# Additional function to generate synth tone from frequency
+def generate_synth_tone_from_freq(frequency, duration, sample_rate, waveform='Sine', envelope=None):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    if waveform == 'Sine':
+        tone = np.sin(2 * np.pi * frequency * t)
+    elif waveform == 'Square':
+        tone = signal.square(2 * np.pi * frequency * t)
+    elif waveform == 'Sawtooth':
+        tone = signal.sawtooth(2 * np.pi * frequency * t)
+    elif waveform == 'Triangle':
+        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    else:
+        tone = np.zeros_like(t)
+    if envelope is not None:
+        tone *= envelope
+    return tone
+
 # Main function
 def main():
     # File library management
@@ -751,222 +704,256 @@ def main():
             st.experimental_rerun()
 
     if st.button("🎶 Generate Noise"):
-        # Generate noise based on selection
-        total_samples = int(duration * sample_rate)
-        combined_data = np.zeros(total_samples)
+        for sample_num in range(num_samples):
+            st.markdown(f"### Sample {sample_num + 1}")
+            # Generate noise based on selection
+            total_samples = int(duration * sample_rate)
+            combined_data = np.zeros(total_samples)
 
-        # Generate noise types
-        for noise_type in noise_types:
-            if noise_type == "White Noise":
-                data = generate_white_noise(duration, sample_rate)
-            elif noise_type == "Pink Noise":
-                data = generate_pink_noise(duration, sample_rate)
-            elif noise_type == "Brown Noise":
-                data = generate_brown_noise(duration, sample_rate)
-            elif noise_type == "Blue Noise":
-                data = generate_blue_noise(duration, sample_rate)
-            elif noise_type == "Violet Noise":
-                data = generate_violet_noise(duration, sample_rate)
-            elif noise_type == "Grey Noise":
-                data = generate_grey_noise(duration, sample_rate)
+            # Introduce slight variations for each sample
+            variation_factor = 0.05  # 5% variation
+            varied_params = {}
+
+            # Vary frequency parameters
+            frequency_variation = random.uniform(1 - variation_factor, 1 + variation_factor)
+            varied_lowcut = lowcut * frequency_variation
+            varied_highcut = highcut * frequency_variation
+
+            # Vary amplitude
+            amplitude_variation = random.uniform(1 - variation_factor, 1 + variation_factor)
+            varied_amplitude = amplitude * amplitude_variation
+
+            # Vary effect parameters
+            varied_effect_params = {}
+            for effect, params in effect_params.items():
+                varied_effect_params[effect] = {}
+                for param_name, value in params.items():
+                    if isinstance(value, (int, float)):
+                        variation = random.uniform(1 - variation_factor, 1 + variation_factor)
+                        varied_effect_params[effect][param_name] = value * variation
+                    else:
+                        varied_effect_params[effect][param_name] = value
+
+            # Use varied parameters in generation
+            # Generate noise types
+            for noise_type in noise_types:
+                if noise_type == "White Noise":
+                    data = generate_white_noise(duration, sample_rate)
+                elif noise_type == "Pink Noise":
+                    data = generate_pink_noise(duration, sample_rate)
+                elif noise_type == "Brown Noise":
+                    data = generate_brown_noise(duration, sample_rate)
+                elif noise_type == "Blue Noise":
+                    data = generate_blue_noise(duration, sample_rate)
+                elif noise_type == "Violet Noise":
+                    data = generate_violet_noise(duration, sample_rate)
+                elif noise_type == "Grey Noise":
+                    data = generate_grey_noise(duration, sample_rate)
+                else:
+                    data = np.zeros(total_samples)
+
+                # Apply filter with varied parameters
+                data = apply_filter(data, varied_lowcut, varied_highcut, sample_rate, order)
+
+                # Normalize audio
+                data = data / np.max(np.abs(data) + 1e-7)
+
+                # Combine noises
+                combined_data += data
+
+            # Generate waveform types
+            for waveform_type in waveform_types:
+                frequency = st.sidebar.slider(f"{waveform_type} Frequency (Hz)", min_value=20, max_value=20000, value=440)
+                # Apply variation to frequency
+                frequency *= frequency_variation
+                data = generate_waveform(waveform_type, frequency, duration, sample_rate)
+                # Apply filter with varied parameters
+                data = apply_filter(data, varied_lowcut, varied_highcut, sample_rate, order)
+                # Normalize audio
+                data = data / np.max(np.abs(data) + 1e-7)
+                # Combine waveforms
+                combined_data += data
+
+            # Synthesizer
+            if synth_enabled:
+                envelope = generate_envelope(total_samples, sample_rate, synth_attack, synth_decay, synth_sustain, synth_release)
+                synth_data = np.zeros(total_samples)
+                for note in synth_notes:
+                    # Apply variation to note frequency
+                    note_freq = note_to_freq(note) * frequency_variation
+                    # Generate tone with varied frequency
+                    tone = generate_synth_tone_from_freq(note_freq, duration, sample_rate, waveform=synth_waveform, envelope=envelope)
+                    synth_data += tone
+                synth_data = synth_data / np.max(np.abs(synth_data) + 1e-7)
+                combined_data += synth_data
+
+            # Include uploaded audio file
+            if uploaded_file is not None:
+                audio_bytes = uploaded_file.read()
+                # Load the uploaded file
+                y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+                y = y[:total_samples]  # Ensure length matches
+                y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+                combined_data += y
+
+            # Voice changer feature
+            if voice_changer and voice_file is not None:
+                voice_bytes = voice_file.read()
+                # Load the voice file
+                y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
+                # Pitch shift by specified semitones
+                y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
+                # Ensure length matches
+                if len(y_shifted) > total_samples:
+                    y_shifted = y_shifted[:total_samples]
+                else:
+                    y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
+                y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
+                combined_data += y_shifted
+
+            # Include algorithmic composition
+            if algorithmic_composition and composition_type is not None:
+                data = generate_algorithmic_composition(duration, sample_rate, composition_type)
+                data = data / np.max(np.abs(data) + 1e-7)
+                combined_data += data
+
+            # Normalize combined data
+            combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
+
+            # Apply varied amplitude
+            combined_data *= varied_amplitude
+
+            # Apply modulation
+            if modulation == "Amplitude Modulation":
+                combined_data = apply_amplitude_modulation(combined_data, sample_rate)
+            elif modulation == "Frequency Modulation":
+                combined_data = apply_frequency_modulation(combined_data, sample_rate)
+
+            # Apply fade in/out
+            combined_data = apply_fade(combined_data, sample_rate, fade_in, fade_out)
+
+            # Apply reverse
+            if reverse_audio:
+                combined_data = apply_reverse(combined_data)
+
+            # Apply bitcrusher
+            if bitcrusher:
+                combined_data = apply_bitcrusher(combined_data, bitcrusher_depth)
+
+            # Apply sample rate reduction
+            if sample_reduction and sample_reduction_factor > 1:
+                combined_data = apply_sample_reduction(combined_data, sample_reduction_factor)
+
+            # Apply rhythmic effects
+            for effect in rhythmic_effects:
+                if effect == "Stutter":
+                    combined_data = apply_stutter(combined_data, sample_rate)
+                elif effect == "Glitch":
+                    combined_data = apply_glitch(combined_data, sample_rate)
+
+            # Apply arpeggiation
+            if arpeggiation:
+                combined_data = apply_arpeggiation(combined_data, sample_rate, pattern=sequence_pattern)
+
+            # Apply sequencer
+            if sequencer:
+                combined_data = apply_sequencer(combined_data, sample_rate, pattern=sequence_pattern)
+
+            # Apply other effects with varied parameters
+            for effect in effects:
+                params = varied_effect_params.get(effect, {})
+                if effect == "Reverb":
+                    combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
+                elif effect == "Delay":
+                    combined_data = apply_delay(combined_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
+                elif effect == "Distortion":
+                    combined_data = apply_distortion(combined_data, gain=params['gain'], threshold=params['threshold'])
+                elif effect == "Tremolo":
+                    combined_data = apply_tremolo(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
+
+            # Adjust bit depth
+            combined_data = adjust_bit_depth(combined_data, bit_depth)
+
+            # Handle stereo or mono
+            if channels == "Stereo":
+                combined_data = pan_stereo(combined_data, panning)
             else:
-                data = np.zeros(total_samples)
+                combined_data = combined_data.reshape(-1, 1)
 
-            # Apply filter
-            data = apply_filter(data, lowcut, highcut, sample_rate, order)
+            # Convert to proper dtype for saving
+            if bit_depth == 16:
+                dtype = np.int16
+                max_int = np.iinfo(dtype).max
+                combined_data = combined_data * max_int
+                combined_data = combined_data.astype(dtype)
+            elif bit_depth == 24:
+                # 24-bit WAV files are supported by soundfile library
+                dtype = 'int24'
+                combined_data = combined_data * (2**23 - 1)
+                combined_data = combined_data.astype(np.int32)
+            else:  # 32-bit
+                dtype = np.float32
+                combined_data = combined_data.astype(dtype)
 
-            # Normalize audio
-            data = data / np.max(np.abs(data) + 1e-7)
-
-            # Combine noises
-            combined_data += data
-
-        # Generate waveform types
-        for waveform_type in waveform_types:
-            frequency = st.sidebar.slider(f"{waveform_type} Frequency (Hz)", min_value=20, max_value=20000, value=440)
-            data = generate_waveform(waveform_type, frequency, duration, sample_rate)
-            # Apply filter
-            data = apply_filter(data, lowcut, highcut, sample_rate, order)
-            # Normalize audio
-            data = data / np.max(np.abs(data) + 1e-7)
-            # Combine waveforms
-            combined_data += data
-
-        # Synthesizer
-        if synth_enabled:
-            envelope = generate_envelope(total_samples, sample_rate, synth_attack, synth_decay, synth_sustain, synth_release)
-            synth_data = np.zeros(total_samples)
-            for note in synth_notes:
-                tone = generate_synth_tone(note, duration, sample_rate, waveform=synth_waveform, envelope=envelope)
-                synth_data += tone
-            synth_data = synth_data / np.max(np.abs(synth_data) + 1e-7)
-            combined_data += synth_data
-
-        # Include uploaded audio file
-        if uploaded_file is not None:
-            audio_bytes = uploaded_file.read()
-            # Load the uploaded file
-            y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
-            y = y[:total_samples]  # Ensure length matches
-            y = y / np.max(np.abs(y) + 1e-7)  # Normalize
-            combined_data += y
-
-        # Voice changer feature
-        if voice_changer and voice_file is not None:
-            voice_bytes = voice_file.read()
-            # Load the voice file
-            y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
-            # Pitch shift by specified semitones
-            y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
-            # Ensure length matches
-            if len(y_shifted) > total_samples:
-                y_shifted = y_shifted[:total_samples]
+            # Save audio to buffer
+            buffer = io.BytesIO()
+            if bit_depth == 24:
+                # Use soundfile to write 24-bit audio
+                sf.write(buffer, combined_data, sample_rate, subtype='PCM_24')
             else:
-                y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
-            y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
-            combined_data += y_shifted
+                write(buffer, sample_rate, combined_data)
+            buffer.seek(0)
 
-        # Include algorithmic composition
-        if algorithmic_composition and composition_type is not None:
-            data = generate_algorithmic_composition(duration, sample_rate, composition_type)
-            data = data / np.max(np.abs(data) + 1e-7)
-            combined_data += data
+            # Play audio
+            st.audio(buffer, format='audio/wav')
 
-        # Normalize combined data
-        combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
+            # Provide download button
+            st.download_button(label=f"💾 Download Sample {sample_num + 1}", data=buffer, file_name=f"industrial_noise_{sample_num + 1}.wav", mime="audio/wav")
 
-        # Apply amplitude
-        combined_data *= amplitude
+            # Plot waveform
+            st.markdown("#### 📈 Waveform")
+            fig_waveform, ax = plt.subplots()
+            times = np.linspace(0, duration, len(combined_data))
+            if channels == "Stereo":
+                ax.plot(times, combined_data[:,0], label='Left Channel', color='steelblue')
+                ax.plot(times, combined_data[:,1], label='Right Channel', color='darkorange')
+            else:
+                ax.plot(times, combined_data, color='steelblue')
+            ax.set_xlabel("Time [s]")
+            ax.set_ylabel("Amplitude")
+            ax.grid(True)
+            if channels == "Stereo":
+                ax.legend()
+            st.pyplot(fig_waveform)
 
-        # Apply modulation
-        if modulation == "Amplitude Modulation":
-            combined_data = apply_amplitude_modulation(combined_data, sample_rate)
-        elif modulation == "Frequency Modulation":
-            combined_data = apply_frequency_modulation(combined_data, sample_rate)
+            # Plot spectrum
+            st.markdown("#### 📊 Frequency Spectrum")
+            fig_spectrum, ax = plt.subplots()
+            if channels == "Stereo":
+                data_mono = combined_data.mean(axis=1)
+            else:
+                data_mono = combined_data.flatten()
+            freqs = np.fft.rfftfreq(len(data_mono), 1/sample_rate)
+            fft_magnitude = np.abs(np.fft.rfft(data_mono))
+            ax.semilogx(freqs, fft_magnitude, color='darkorange')
+            ax.set_xlabel("Frequency [Hz]")
+            ax.set_ylabel("Magnitude")
+            ax.grid(True)
+            st.pyplot(fig_spectrum)
 
-        # Apply fade in/out
-        combined_data = apply_fade(combined_data, sample_rate, fade_in, fade_out)
+            # Plot spectrogram
+            st.markdown("#### 🎼 Spectrogram")
+            fig_spectrogram, ax = plt.subplots()
+            D = librosa.amplitude_to_db(np.abs(librosa.stft(data_mono)), ref=np.max)
+            img = librosa.display.specshow(D, sr=sample_rate, x_axis='time', y_axis='log', ax=ax)
+            ax.set_title('Spectrogram')
+            fig_spectrogram.colorbar(img, ax=ax, format="%+2.0f dB")
+            st.pyplot(fig_spectrogram)
 
-        # Apply reverse
-        if reverse_audio:
-            combined_data = apply_reverse(combined_data)
-
-        # Apply bitcrusher
-        if bitcrusher:
-            combined_data = apply_bitcrusher(combined_data, bitcrusher_depth)
-
-        # Apply sample rate reduction
-        if sample_reduction and sample_reduction_factor > 1:
-            combined_data = apply_sample_reduction(combined_data, sample_reduction_factor)
-
-        # Apply rhythmic effects
-        for effect in rhythmic_effects:
-            if effect == "Stutter":
-                combined_data = apply_stutter(combined_data, sample_rate)
-            elif effect == "Glitch":
-                combined_data = apply_glitch(combined_data, sample_rate)
-
-        # Apply arpeggiation
-        if arpeggiation:
-            combined_data = apply_arpeggiation(combined_data, sample_rate, pattern=sequence_pattern)
-
-        # Apply sequencer
-        if sequencer:
-            combined_data = apply_sequencer(combined_data, sample_rate, pattern=sequence_pattern)
-
-        # Apply other effects
-        for effect in effects:
-            params = effect_params.get(effect, {})
-            if effect == "Reverb":
-                combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
-            elif effect == "Delay":
-                combined_data = apply_delay(combined_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
-            elif effect == "Distortion":
-                combined_data = apply_distortion(combined_data, gain=params['gain'], threshold=params['threshold'])
-            elif effect == "Tremolo":
-                combined_data = apply_tremolo(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
-
-        # Adjust bit depth
-        combined_data = adjust_bit_depth(combined_data, bit_depth)
-
-        # Handle stereo or mono
-        if channels == "Stereo":
-            combined_data = pan_stereo(combined_data, panning)
-        else:
-            combined_data = combined_data.reshape(-1, 1)
-
-        # Convert to proper dtype for saving
-        if bit_depth == 16:
-            dtype = np.int16
-            max_int = np.iinfo(dtype).max
-            combined_data = combined_data * max_int
-            combined_data = combined_data.astype(dtype)
-        elif bit_depth == 24:
-            # 24-bit WAV files are supported by soundfile library
-            dtype = 'int24'
-            combined_data = combined_data * (2**23 - 1)
-            combined_data = combined_data.astype(np.int32)
-        else:  # 32-bit
-            dtype = np.float32
-            combined_data = combined_data.astype(dtype)
-
-        # Save audio to buffer
-        buffer = io.BytesIO()
-        if bit_depth == 24:
-            # Use soundfile to write 24-bit audio
-            sf.write(buffer, combined_data, sample_rate, subtype='PCM_24')
-        else:
-            write(buffer, sample_rate, combined_data)
-        buffer.seek(0)
-
-        # Play audio
-        st.audio(buffer, format='audio/wav')
-
-        # Provide download button
-        st.download_button(label="💾 Download WAV", data=buffer, file_name="industrial_noise.wav", mime="audio/wav")
-
-        # Plot waveform
-        st.markdown("#### 📈 Waveform")
-        fig_waveform, ax = plt.subplots()
-        times = np.linspace(0, duration, len(combined_data))
-        if channels == "Stereo":
-            ax.plot(times, combined_data[:,0], label='Left Channel', color='steelblue')
-            ax.plot(times, combined_data[:,1], label='Right Channel', color='darkorange')
-        else:
-            ax.plot(times, combined_data, color='steelblue')
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Amplitude")
-        ax.grid(True)
-        if channels == "Stereo":
-            ax.legend()
-        st.pyplot(fig_waveform)
-
-        # Plot spectrum
-        st.markdown("#### 📊 Frequency Spectrum")
-        fig_spectrum, ax = plt.subplots()
-        if channels == "Stereo":
-            data_mono = combined_data.mean(axis=1)
-        else:
-            data_mono = combined_data.flatten()
-        freqs = np.fft.rfftfreq(len(data_mono), 1/sample_rate)
-        fft_magnitude = np.abs(np.fft.rfft(data_mono))
-        ax.semilogx(freqs, fft_magnitude, color='darkorange')
-        ax.set_xlabel("Frequency [Hz]")
-        ax.set_ylabel("Magnitude")
-        ax.grid(True)
-        st.pyplot(fig_spectrum)
-
-        # Plot spectrogram
-        st.markdown("#### 🎼 Spectrogram")
-        fig_spectrogram, ax = plt.subplots()
-        D = librosa.amplitude_to_db(np.abs(librosa.stft(data_mono)), ref=np.max)
-        img = librosa.display.specshow(D, sr=sample_rate, x_axis='time', y_axis='log', ax=ax)
-        ax.set_title('Spectrogram')
-        fig_spectrogram.colorbar(img, ax=ax, format="%+2.0f dB")
-        st.pyplot(fig_spectrogram)
+            st.markdown("---")  # Separator between samples
 
     else:
-        st.write("Adjust parameters and click **Generate Noise** to create your industrial noise sample.")
+        st.write("Adjust parameters and click **Generate Noise** to create your industrial noise samples.")
 
 # Run the app
 if __name__ == "__main__":
