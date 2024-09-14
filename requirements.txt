@@ -12,3 +12,4 @@ fpdf
 gtts
 midiutil
 python-dotenv
+librosa
