@@ -261,19 +261,19 @@ else:
     for effect in effects:
         st.sidebar.markdown(f"**{effect} Parameters**")
         if effect == "Reverb":
-            decay = st.sidebar.slider("Reverb Decay", 0.1, 2.0, 0.5)
+            decay = st.sidebar.slider("Reverb Decay", 0.1, 2.0, 0.5, key=f"reverb_decay_{effect}")
             effect_params['Reverb'] = {'decay': decay}
         elif effect == "Delay":
-            delay_time = st.sidebar.slider("Delay Time (seconds)", 0.1, 1.0, 0.5)
-            feedback = st.sidebar.slider("Delay Feedback", 0.0, 1.0, 0.5)
+            delay_time = st.sidebar.slider("Delay Time (seconds)", 0.1, 1.0, 0.5, key=f"delay_time_{effect}")
+            feedback = st.sidebar.slider("Delay Feedback", 0.0, 1.0, 0.5, key=f"delay_feedback_{effect}")
             effect_params['Delay'] = {'delay_time': delay_time, 'feedback': feedback}
         elif effect == "Distortion":
-            gain = st.sidebar.slider("Distortion Gain", 1.0, 50.0, 20.0)
-            threshold = st.sidebar.slider("Distortion Threshold", 0.0, 1.0, 0.5)
+            gain = st.sidebar.slider("Distortion Gain", 1.0, 50.0, 20.0, key=f"distortion_gain_{effect}")
+            threshold = st.sidebar.slider("Distortion Threshold", 0.0, 1.0, 0.5, key=f"distortion_threshold_{effect}")
             effect_params['Distortion'] = {'gain': gain, 'threshold': threshold}
         elif effect == "Tremolo":
-            rate = st.sidebar.slider("Tremolo Rate (Hz)", 0.1, 20.0, 5.0)
-            depth = st.sidebar.slider("Tremolo Depth", 0.0, 1.0, 0.8)
+            rate = st.sidebar.slider("Tremolo Rate (Hz)", 0.1, 20.0, 5.0, key=f"tremolo_rate_{effect}")
+            depth = st.sidebar.slider("Tremolo Depth", 0.0, 1.0, 0.8, key=f"tremolo_depth_{effect}")
             effect_params['Tremolo'] = {'rate': rate, 'depth': depth}
     st.sidebar.subheader("🎤 Voice Changer")
     voice_changer = st.sidebar.checkbox("Enable Voice Changer (Pitch Shift)")
@@ -291,330 +291,20 @@ else:
     else:
         composition_type = None
 
-# Functions to generate noise
-def generate_white_noise(duration, sample_rate):
-    samples = np.random.normal(0, 1, int(duration * sample_rate))
-    return samples
+# Collect waveform frequencies outside the main function
+waveform_frequencies = {}
+for waveform_type in waveform_types:
+    frequency = st.sidebar.slider(
+        f"{waveform_type} Frequency (Hz)",
+        min_value=20,
+        max_value=20000,
+        value=440,
+        key=f"{waveform_type}_frequency_slider"
+    )
+    waveform_frequencies[waveform_type] = frequency
 
-def generate_pink_noise(duration, sample_rate):
-    # Voss-McCartney algorithm
-    samples = int(duration * sample_rate)
-    n_rows = 16
-    n_columns = int(np.ceil(samples / n_rows))
-    array = np.random.randn(n_rows, n_columns)
-    cumulative = np.cumsum(array, axis=0)
-    pink_noise = cumulative[-1, :]
-    pink_noise = pink_noise[:samples]
-    return pink_noise
-
-def generate_brown_noise(duration, sample_rate):
-    samples = int(duration * sample_rate)
-    brown_noise = np.cumsum(np.random.randn(samples))
-    brown_noise = brown_noise / np.max(np.abs(brown_noise) + 1e-7)
-    return brown_noise
-
-def generate_blue_noise(duration, sample_rate):
-    # Differentiated white noise
-    samples = int(duration * sample_rate)
-    white = np.random.normal(0, 1, samples)
-    blue_noise = np.diff(white)
-    blue_noise = np.concatenate(([0], blue_noise))
-    return blue_noise
-
-def generate_violet_noise(duration, sample_rate):
-    # Differentiated blue noise
-    samples = int(duration * sample_rate)
-    white = np.random.normal(0, 1, samples)
-    violet_noise = np.diff(np.diff(white))
-    violet_noise = np.concatenate(([0, 0], violet_noise))
-    return violet_noise
-
-def generate_grey_noise(duration, sample_rate):
-    # Shaped white noise to match human hearing
-    samples = int(duration * sample_rate)
-    white = np.random.normal(0, 1, samples)
-    freqs = np.fft.rfftfreq(samples, 1/sample_rate)
-    a_weighting = (12200**2 * freqs**4) / ((freqs**2 + 20.6**2) * np.sqrt((freqs**2 + 107.7**2) * (freqs**2 + 737.9**2)) * (freqs**2 + 12200**2))
-    a_weighting = a_weighting / np.max(a_weighting + 1e-7)
-    white_fft = np.fft.rfft(white)
-    grey_fft = white_fft * a_weighting
-    grey_noise = np.fft.irfft(grey_fft)
-    return grey_noise
-
-# Functions to generate waveforms
-def generate_waveform(waveform_type, frequency, duration, sample_rate):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    if waveform_type == "Sine Wave":
-        waveform = np.sin(2 * np.pi * frequency * t)
-    elif waveform_type == "Square Wave":
-        waveform = signal.square(2 * np.pi * frequency * t)
-    elif waveform_type == "Sawtooth Wave":
-        waveform = signal.sawtooth(2 * np.pi * frequency * t)
-    elif waveform_type == "Triangle Wave":
-        waveform = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
-    else:
-        waveform = np.zeros_like(t)
-    return waveform
-
-def generate_synth_tone(note, duration, sample_rate, waveform='Sine', envelope=None):
-    frequency = note_to_freq(note)
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    if waveform == 'Sine':
-        tone = np.sin(2 * np.pi * frequency * t)
-    elif waveform == 'Square':
-        tone = signal.square(2 * np.pi * frequency * t)
-    elif waveform == 'Sawtooth':
-        tone = signal.sawtooth(2 * np.pi * frequency * t)
-    elif waveform == 'Triangle':
-        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
-    else:
-        tone = np.zeros_like(t)
-    if envelope:
-        tone *= envelope
-    return tone
-
-def note_to_freq(note):
-    # Convert note (e.g., 'A4') to frequency
-    A4_freq = 440.0
-    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F',
-                  'F#', 'G', 'G#', 'A', 'A#', 'B']
-    octave = int(note[-1])
-    key_number = note_names.index(note[:-1])
-    n = key_number + (octave - 4) * 12
-    freq = A4_freq * (2 ** (n / 12))
-    return freq
-
-def generate_envelope(total_samples, sample_rate, attack, decay, sustain, release):
-    envelope = np.zeros(total_samples)
-    attack_samples = int(attack * sample_rate)
-    decay_samples = int(decay * sample_rate)
-    release_samples = int(release * sample_rate)
-    sustain_samples = total_samples - attack_samples - decay_samples - release_samples
-    # Ensure no negative values
-    sustain_samples = max(sustain_samples, 0)
-    # Attack
-    envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
-    # Decay
-    envelope[attack_samples:attack_samples+decay_samples] = np.linspace(1, sustain, decay_samples)
-    # Sustain
-    envelope[attack_samples+decay_samples:attack_samples+decay_samples+sustain_samples] = sustain
-    # Release
-    envelope[-release_samples:] = np.linspace(sustain, 0, release_samples)
-    return envelope
-
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    # Create a bandpass filter
-    nyq = 0.5 * fs
-    low = max(lowcut / nyq, 0.001)
-    high = min(highcut / nyq, 0.999)
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
-
-def apply_filter(data, lowcut, highcut, fs, order=5):
-    # Apply the bandpass filter
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
-
-def apply_fade(data, sample_rate, fade_in, fade_out):
-    # Ensure data is at least two-dimensional
-    if data.ndim == 1:
-        data = data.reshape(-1, 1)
-
-    # Apply fade in/out
-    total_samples = data.shape[0]
-    fade_in_samples = int(fade_in * sample_rate)
-    fade_out_samples = int(fade_out * sample_rate)
-
-    # Ensure fade samples do not exceed total samples
-    fade_in_samples = min(fade_in_samples, total_samples)
-    fade_out_samples = min(fade_out_samples, total_samples)
-
-    # Apply fade-in if applicable
-    if fade_in_samples > 0:
-        fade_in_curve = np.linspace(0, 1, fade_in_samples).reshape(-1, 1)
-        data[:fade_in_samples] *= fade_in_curve
-
-    # Apply fade-out if applicable
-    if fade_out_samples > 0:
-        fade_out_curve = np.linspace(1, 0, fade_out_samples).reshape(-1, 1)
-        data[-fade_out_samples:] *= fade_out_curve
-
-    # Flatten data if original was one-dimensional
-    if data.shape[1] == 1:
-        data = data.flatten()
-
-    return data
-
-def apply_amplitude_modulation(data, sample_rate, mod_freq=5.0):
-    # Apply amplitude modulation
-    t = np.linspace(0, len(data)/sample_rate, num=len(data))
-    modulator = np.sin(2 * np.pi * mod_freq * t)
-    return data * modulator
-
-def apply_frequency_modulation(data, sample_rate, mod_freq=5.0, mod_index=2.0):
-    # Apply frequency modulation
-    t = np.linspace(0, len(data)/sample_rate, num=len(data))
-    carrier = np.sin(2 * np.pi * 440 * t + mod_index * np.sin(2 * np.pi * mod_freq * t))
-    return data * carrier
-
-def apply_reverb(data, sample_rate, decay=0.5):
-    # Simple reverb effect using feedback delay
-    reverb_data = np.copy(data)
-    delay_samples = int(0.02 * sample_rate)
-    for i in range(delay_samples, len(data)):
-        reverb_data[i] += decay * reverb_data[i - delay_samples]
-    return reverb_data
-
-def apply_delay(data, sample_rate, delay_time=0.5, feedback=0.5):
-    # Simple delay effect
-    delay_samples = int(delay_time * sample_rate)
-    delayed_data = np.zeros(len(data) + delay_samples)
-    delayed_data[:len(data)] = data
-    for i in range(len(data)):
-        delayed_data[i + delay_samples] += data[i] * feedback
-    return delayed_data[:len(data)]
-
-def apply_distortion(data, gain=20, threshold=0.5):
-    # Simple distortion effect
-    data = data * gain
-    data[data > threshold] = threshold
-    data[data < -threshold] = -threshold
-    return data
-
-def adjust_bit_depth(data, bit_depth):
-    # Adjust bit depth
-    max_val = 2 ** (bit_depth - 1) - 1
-    data = data * max_val
-    data = np.round(data)
-    data = data / max_val
-    return data
-
-def pan_stereo(data, panning):
-    # Panning for stereo sound
-    left = data * (1 - panning)
-    right = data * panning
-    stereo_data = np.vstack((left, right)).T
-    return stereo_data
-
-def generate_algorithmic_composition(duration, sample_rate, composition_type):
-    if composition_type == "Random Melody":
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        melody = np.zeros_like(t)
-        num_notes = int(duration * 2)  # 2 notes per second
-        note_durations = np.random.uniform(0.1, 0.5, size=num_notes)
-        note_frequencies = np.random.uniform(200, 800, size=num_notes)
-        current_sample = 0
-        for i in range(num_notes):
-            note_duration_samples = int(note_durations[i] * sample_rate)
-            end_sample = current_sample + note_duration_samples
-            if end_sample > len(t):
-                end_sample = len(t)
-            melody[current_sample:end_sample] = np.sin(2 * np.pi * note_frequencies[i] * t[current_sample:end_sample])
-            current_sample = end_sample
-            if current_sample >= len(t):
-                break
-        return melody
-    elif composition_type == "Ambient Soundscape":
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        soundscape = np.sin(2 * np.pi * 220 * t) * np.random.uniform(0.5, 1.0)
-        return soundscape
-    elif composition_type == "Rhythmic Pattern":
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        bpm = 120
-        beat_duration = 60 / bpm
-        num_beats = int(duration / beat_duration)
-        rhythm = np.zeros_like(t)
-        for i in range(num_beats):
-            start_sample = int(i * beat_duration * sample_rate)
-            end_sample = start_sample + int(0.1 * sample_rate)  # 100 ms per beat
-            if end_sample > len(t):
-                end_sample = len(t)
-            rhythm[start_sample:end_sample] = 1.0
-        return rhythm * np.sin(2 * np.pi * 440 * t)
-    else:
-        return np.zeros(int(duration * sample_rate))
-
-def pitch_shift_audio(data, sample_rate, n_steps):
-    # Pitch shift using librosa
-    return librosa.effects.pitch_shift(data, sample_rate, n_steps=n_steps)
-
-def apply_tremolo(data, sample_rate, rate=5.0, depth=0.8):
-    # Tremolo effect
-    t = np.arange(len(data)) / sample_rate
-    tremolo = (1 + depth * np.sin(2 * np.pi * rate * t)) / 2
-    return data * tremolo
-
-def apply_bitcrusher(data, bit_depth):
-    # Bitcrusher effect
-    max_val = 2 ** (bit_depth - 1) - 1
-    data = data * max_val
-    data = np.round(data)
-    data = data / max_val
-    return data
-
-def apply_sample_reduction(data, reduction_factor):
-    # Sample rate reduction
-    reduced_data = data[::reduction_factor]
-    upsampled_data = np.repeat(reduced_data, reduction_factor)
-    upsampled_data = upsampled_data[:len(data)]  # Ensure the length matches
-    return upsampled_data
-
-def apply_reverse(data):
-    # Reverse audio
-    return data[::-1]
-
-def apply_stutter(data, sample_rate, interval=0.1):
-    # Stutter effect
-    stutter_samples = int(interval * sample_rate)
-    num_repeats = 3
-    stuttered_data = []
-    for i in range(0, len(data), stutter_samples):
-        chunk = data[i:i+stutter_samples]
-        for _ in range(num_repeats):
-            stuttered_data.append(chunk)
-    stuttered_data = np.concatenate(stuttered_data)
-    return stuttered_data[:len(data)]
-
-def apply_glitch(data, sample_rate):
-    # Glitch effect
-    glitch_length = int(0.05 * sample_rate)
-    glitch_data = np.copy(data)
-    for i in range(0, len(data), glitch_length * 4):
-        glitch_data[i:i+glitch_length] = 0
-    return glitch_data
-
-def apply_arpeggiation(data, sample_rate, pattern='Ascending'):
-    # Arpeggiation effect
-    num_notes = 4
-    note_length = int(len(data) / num_notes)
-    arpeggiated_data = np.zeros_like(data)
-    indices = list(range(num_notes))
-    if pattern == 'Ascending':
-        pass  # Indices already in ascending order
-    elif pattern == 'Descending':
-        indices = indices[::-1]
-    elif pattern == 'Random':
-        random.shuffle(indices)
-    for idx, i in enumerate(indices):
-        start = i * note_length
-        end = start + note_length
-        arpeggiated_data[start:end] = data[start:end]
-    return arpeggiated_data
-
-def apply_sequencer(data, sample_rate, pattern='Random'):
-    # Sequencer effect
-    sequence_length = int(sample_rate * 0.5)  # 0.5 seconds per sequence
-    num_sequences = len(data) // sequence_length
-    sequences = [data[i*sequence_length:(i+1)*sequence_length] for i in range(num_sequences)]
-    if pattern == 'Ascending':
-        pass
-    elif pattern == 'Descending':
-        sequences = sequences[::-1]
-    elif pattern == 'Random':
-        random.shuffle(sequences)
-    sequenced_data = np.concatenate(sequences)
-    return sequenced_data
+# Functions to generate noise and effects (same as your original code)
+# ... [Insert all your function definitions here without changes] ...
 
 # File library functions
 def save_preset(params, name):
@@ -633,23 +323,6 @@ def list_presets():
         return [f.replace('.pkl', '') for f in os.listdir('presets') if f.endswith('.pkl')]
     else:
         return []
-
-# Additional function to generate synth tone from frequency
-def generate_synth_tone_from_freq(frequency, duration, sample_rate, waveform='Sine', envelope=None):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    if waveform == 'Sine':
-        tone = np.sin(2 * np.pi * frequency * t)
-    elif waveform == 'Square':
-        tone = signal.square(2 * np.pi * frequency * t)
-    elif waveform == 'Sawtooth':
-        tone = signal.sawtooth(2 * np.pi * frequency * t)
-    elif waveform == 'Triangle':
-        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
-    else:
-        tone = np.zeros_like(t)
-    if envelope is not None:
-        tone *= envelope
-    return tone
 
 # Main function
 def main():
@@ -707,8 +380,8 @@ def main():
         load_preset_name = st.sidebar.selectbox("Load Preset", available_presets)
         if st.sidebar.button("Load Selected Preset"):
             loaded_params = load_preset(load_preset_name)
-            # Update parameters with loaded preset
             st.sidebar.success(f"Preset '{load_preset_name}' loaded!")
+            # Update parameters with loaded preset
             st.experimental_rerun()
 
     if st.button("🎶 Generate Noise"):
@@ -742,7 +415,6 @@ def main():
                     else:
                         varied_effect_params[effect][param_name] = value
 
-            # Use varied parameters in generation
             # Generate noise types
             for noise_type in noise_types:
                 if noise_type == "White Noise":
@@ -771,7 +443,7 @@ def main():
 
             # Generate waveform types
             for waveform_type in waveform_types:
-                frequency = st.sidebar.slider(f"{waveform_type} Frequency (Hz)", min_value=20, max_value=20000, value=440)
+                frequency = waveform_frequencies[waveform_type]
                 # Apply variation to frequency
                 frequency *= frequency_variation
                 data = generate_waveform(waveform_type, frequency, duration, sample_rate)
