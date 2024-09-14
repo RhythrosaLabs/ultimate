@@ -150,7 +150,7 @@ def set_preset(preset):
 
 preset_params = set_preset(preset)
 
-if preset != "Custom":
+if preset != "Custom" and preset_params is not None:
     # Set parameters from preset
     duration = preset_params['duration']
     noise_types = preset_params['noise_type']
@@ -338,7 +338,6 @@ def pan_stereo(data, panning):
 def main():
     if st.button("🎶 Generate Noise"):
         # Generate noise based on selection
-        sample_rate = sample_rate  # User-selected sample rate
         combined_data = np.zeros(int(duration * sample_rate))
 
         for noise_type in noise_types:
@@ -361,13 +360,13 @@ def main():
             data = apply_filter(data, lowcut, highcut, sample_rate, order)
             
             # Normalize audio
-            data = data / np.max(np.abs(data))
+            data = data / np.max(np.abs(data) + 1e-7)  # Added epsilon to prevent division by zero
             
             # Combine noises
             combined_data += data
 
         # Normalize combined data
-        combined_data = combined_data / np.max(np.abs(combined_data))
+        combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
         
         # Apply amplitude
         combined_data *= amplitude
@@ -405,7 +404,7 @@ def main():
             combined_data = combined_data * max_int
             combined_data = combined_data.astype(dtype)
         elif bit_depth == 24:
-            # 24-bit WAV files are not standard, using 32-bit float as a workaround
+            # 24-bit WAV files are not standard; we'll use 32-bit float as a workaround
             dtype = np.float32
             combined_data = combined_data.astype(dtype)
         else:  # 32-bit
@@ -458,8 +457,9 @@ def main():
         st.markdown("#### 🎼 Spectrogram")
         fig_spectrogram, ax = plt.subplots()
         D = librosa.amplitude_to_db(np.abs(librosa.stft(data_mono)), ref=np.max)
-        librosa.display.specshow(D, sr=sample_rate, x_axis='time', y_axis='log', ax=ax)
+        img = librosa.display.specshow(D, sr=sample_rate, x_axis='time', y_axis='log', ax=ax)
         ax.set_title('Spectrogram')
+        fig_spectrogram.colorbar(img, ax=ax, format="%+2.0f dB")
         st.pyplot(fig_spectrogram)
     
     else:
