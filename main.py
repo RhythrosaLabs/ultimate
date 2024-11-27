@@ -2,7 +2,9 @@ import streamlit as st
 import soundfile as sf
 import numpy as np
 import io
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter, freqz
+from scipy.fftpack import fft
+import librosa
 
 # Utility function for filtering audio
 def butter_lowpass_filter(data, cutoff, fs, order=5):
@@ -40,6 +42,13 @@ if audio_input:
     reverse_audio = st.sidebar.checkbox("Reverse Audio")
     apply_speed_change = st.sidebar.checkbox("Change Speed")
     speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
+    apply_pitch_shift = st.sidebar.checkbox("Pitch Shift")
+    pitch_shift_steps = st.sidebar.slider("Pitch Shift Steps", -12, 12, 0)
+    apply_amplify = st.sidebar.checkbox("Amplify Volume")
+    amplification_factor = st.sidebar.slider("Amplification Factor", 0.5, 3.0, 1.0)
+    apply_echo = st.sidebar.checkbox("Add Echo")
+    echo_delay = st.sidebar.slider("Echo Delay (ms)", 100, 2000, 500)
+    echo_decay = st.sidebar.slider("Echo Decay Factor", 0.1, 1.0, 0.5)
 
     # Apply effects
     processed_audio = audio_data
@@ -57,6 +66,22 @@ if audio_input:
         indices = indices[indices < len(processed_audio)]
         processed_audio = processed_audio[indices]
         st.sidebar.success(f"Audio speed changed by a factor of {speed_factor}")
+
+    if apply_pitch_shift:
+        processed_audio = librosa.effects.pitch_shift(processed_audio.astype(np.float32), samplerate, n_steps=pitch_shift_steps)
+        st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} steps")
+
+    if apply_amplify:
+        processed_audio = processed_audio * amplification_factor
+        st.sidebar.success(f"Volume amplified by a factor of {amplification_factor}")
+
+    if apply_echo:
+        delay_samples = int((echo_delay / 1000.0) * samplerate)
+        echo = np.zeros_like(processed_audio)
+        for i in range(delay_samples, len(processed_audio)):
+            echo[i] = processed_audio[i - delay_samples] * echo_decay
+        processed_audio = processed_audio + echo
+        st.sidebar.success(f"Echo added with {echo_delay} ms delay and {echo_decay} decay factor")
 
     # Save processed audio
     output_audio = io.BytesIO()
