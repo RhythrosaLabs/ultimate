@@ -10,6 +10,7 @@ from pydub import AudioSegment
 import random
 import matplotlib.pyplot as plt
 import logging
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 
 # Setup logging
 logging.basicConfig(filename='audio_studio.log', level=logging.ERROR,
@@ -108,6 +109,24 @@ PRESETS = {
     }
 }
 
+# Define the AudioProcessor callback
+class AudioProcessor:
+    def __init__(self):
+        self.audio_frames = []
+    
+    def recv(self, frame):
+        audio = frame.to_ndarray().mean(axis=1)  # Convert to mono
+        self.audio_frames.append(audio)
+        return frame
+
+# Define WebRTC client settings
+WEBRTC_CLIENT_SETTINGS = ClientSettings(
+    rtc_configuration={
+        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+    },
+    media_stream_constraints={"audio": True, "video": False},
+)
+
 # App configuration
 st.set_page_config(
     page_title="Superpowered Audio Studio",
@@ -121,41 +140,80 @@ st.markdown("Record, enhance, and apply effects to your audio with ease!")
 # Live Preview Toggle
 live_preview = st.checkbox("Enable Live Preview", value=False)
 
-# Audio recording/upload section using the new st.audio_input
-audio_input = st.audio_input("Record or upload your audio file")
+# Audio recording section using streamlit-webrtc
+st.header("🎤 Record Your Audio")
 
-if audio_input is not None:
-    # Display a spinner while processing
-    with st.spinner("Processing audio..."):
-        # Read audio data
-        try:
-            # st.audio_input returns a BytesIO object; read it with soundfile
-            audio_input.seek(0)
-            audio_data, samplerate = sf.read(audio_input)
-        except Exception as e:
-            st.error(f"Error reading audio file: {e}")
-            logging.error(f"Error reading audio file: {e}")
-            st.stop()
+# Initialize the audio processor
+audio_processor = AudioProcessor()
 
+# Start the WebRTC streamer
+webrtc_ctx = webrtc_streamer(
+    key="audio-recorder",
+    mode=WebRtcMode.RECVONLY,
+    client_settings=WEBRTC_CLIENT_SETTINGS,
+    audio_receiver_size=256,
+    async_processing=True,
+    on_audio_frame=audio_processor.recv,
+)
+
+st.write("Press the microphone button to start recording. Once done, click the button below to process and download your audio.")
+
+if st.button("Process and Download Audio"):
+    try:
+        if not audio_processor.audio_frames:
+            st.warning("No audio recorded yet. Please record some audio first.")
+        else:
+            # Concatenate all recorded audio frames
+            recorded_audio = np.concatenate(audio_processor.audio_frames)
+            
+            # Normalize audio
+            recorded_audio = recorded_audio / np.max(np.abs(recorded_audio))
+            
+            # Convert to 16-bit PCM
+            recorded_audio_int16 = (recorded_audio * 32767).astype(np.int16)
+            
+            # Create a BytesIO buffer
+            buffer = io.BytesIO()
+            sf.write(buffer, recorded_audio_int16, 44100, format='WAV')  # Adjust sample rate if necessary
+            buffer.seek(0)
+            
+            # Provide download button
+            st.download_button(
+                label="Download WAV",
+                data=buffer,
+                file_name="recorded_audio.wav",
+                mime="audio/wav"
+            )
+            
+            st.success("Audio processed and ready for download!")
+            
+    except Exception as e:
+        st.error(f"Error processing audio: {e}")
+        logging.error(f"Error processing audio: {e}")
+
+# Check if an audio file is uploaded (optional)
+st.header("📁 Upload Audio File")
+uploaded_file = st.file_uploader("Upload your audio file", type=["wav", "mp3", "flac", "ogg"])
+
+if uploaded_file is not None:
+    try:
+        audio_input = uploaded_file
+        audio_data, samplerate = sf.read(audio_input)
+        
         # Ensure mono and float32 format for compatibility
-        try:
-            if len(audio_data.shape) > 1:
-                audio_data = np.mean(audio_data, axis=1)
-            audio_data = audio_data.astype(np.float32)
-        except Exception as e:
-            st.error(f"Error processing audio data: {e}")
-            logging.error(f"Error processing audio data: {e}")
-            st.stop()
-
-        st.success("Audio successfully uploaded or recorded!")
-
+        if len(audio_data.shape) > 1:
+            audio_data = np.mean(audio_data, axis=1)
+        audio_data = audio_data.astype(np.float32)
+        
+        st.success("Audio successfully uploaded!")
+        
         # Playback original audio
         st.subheader("Playback Original Audio")
         st.audio(audio_input, format='audio/wav')
-
+        
         # User controls for effects
         st.sidebar.title("🎛️ Audio Effects")
-
+        
         # Tooltips for effects
         st.sidebar.markdown("""
         **Effect Descriptions:**
@@ -175,7 +233,7 @@ if audio_input is not None:
         - **Amplify Volume:** Increases or decreases the audio volume.
         - **Reverse Audio:** Reverses the audio playback direction.
         """)
-
+        
         # Presets
         preset_choice = st.sidebar.selectbox("Choose an Effect Preset", ["None"] + list(PRESETS.keys()))
         if preset_choice != "None":
@@ -211,7 +269,7 @@ if audio_input is not None:
             apply_equalization_flag = False
             eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
             eq_gains = [1.5, 1.0, 0.8]
-
+    
             # Update settings based on preset
             for key, value in preset_settings.items():
                 locals()[key] = value
@@ -221,47 +279,47 @@ if audio_input is not None:
                 cutoff_freq_low = st.sidebar.slider("Lowpass Cutoff Frequency (Hz)", 100, samplerate // 2, 1000)
             else:
                 cutoff_freq_low = 1000
-
+    
             apply_highpass = st.sidebar.checkbox("Apply Highpass Filter")
             if apply_highpass:
                 cutoff_freq_high = st.sidebar.slider("Highpass Cutoff Frequency (Hz)", 20, samplerate // 2, 500)
             else:
                 cutoff_freq_high = 500
-
+    
             apply_reverb = st.sidebar.checkbox("Add Reverb")
             if apply_reverb:
                 reverb_decay = st.sidebar.slider("Reverb Decay Factor", 0.1, 1.0, 0.5)
             else:
                 reverb_decay = 0.5
-
+    
             apply_bitcrusher = st.sidebar.checkbox("Apply Bitcrusher")
             if apply_bitcrusher:
                 bit_depth = st.sidebar.slider("Bit Depth", 4, 16, 8)
             else:
                 bit_depth = 8
-
+    
             reverse_audio = st.sidebar.checkbox("Reverse Audio")
-
+    
             # Commented Out: Speed Change
             # apply_speed_change = st.sidebar.checkbox("Change Speed")
             # if apply_speed_change:
             #     speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
             # else:
             #     speed_factor = 1.0
-
+    
             # Commented Out: Pitch Shift
             # apply_pitch_shift = st.sidebar.checkbox("Pitch Shift")
             # if apply_pitch_shift:
             #     pitch_shift_steps = st.sidebar.slider("Pitch Shift Steps", -12, 12, 0)
             # else:
             #     pitch_shift_steps = 0
-
+    
             apply_amplify = st.sidebar.checkbox("Amplify Volume")
             if apply_amplify:
                 amplification_factor = st.sidebar.slider("Amplification Factor", 0.5, 3.0, 1.0)
             else:
                 amplification_factor = 1.0
-
+    
             apply_echo = st.sidebar.checkbox("Add Echo")
             if apply_echo:
                 echo_delay = st.sidebar.slider("Echo Delay (ms)", 100, 2000, 500)
@@ -269,7 +327,7 @@ if audio_input is not None:
             else:
                 echo_delay = 500
                 echo_decay = 0.5
-
+    
             apply_chorus_effect = st.sidebar.checkbox("Add Chorus")
             apply_phaser_effect = st.sidebar.checkbox("Add Phaser")
             apply_overdrive_effect = st.sidebar.checkbox("Add Overdrive")
@@ -280,7 +338,7 @@ if audio_input is not None:
             else:
                 distortion_gain = 1.0
                 distortion_threshold = 0.3
-
+    
             apply_flanger_flag = st.sidebar.checkbox("Add Flanger")
             if apply_flanger_flag:
                 flanger_delay = st.sidebar.slider("Flanger Delay (s)", 0.001, 0.02, 0.005)
@@ -290,66 +348,66 @@ if audio_input is not None:
                 flanger_delay = 0.005
                 flanger_depth = 0.002
                 flanger_rate = 0.25
-
+    
             apply_equalization_flag = st.sidebar.checkbox("Add Equalization")
             if apply_equalization_flag:
-                eq_gain_freqs = st.sidebar.multiselect("Select Frequency Bands for EQ", [300, 1000, 3000, 6000, 12000], default=[300, 1000, 3000])
+                eq_gain_freqs_selected = st.sidebar.multiselect("Select Frequency Bands for EQ", [300, 1000, 3000, 6000, 12000], default=[300, 1000, 3000])
                 eq_gains = []
-                for freq in eq_gain_freqs:
+                for freq in eq_gain_freqs_selected:
                     gain = st.sidebar.slider(f"Gain for {freq} Hz", 0.5, 2.0, 1.0, step=0.1)
                     eq_gains.append(gain)
                 # Convert list to list of tuples for bandpass
-                eq_gain_freqs = [(freq - 100, freq + 100) for freq in eq_gain_freqs]
+                eq_gain_freqs = [(freq - 100, freq + 100) for freq in eq_gain_freqs_selected]
             else:
                 eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
                 eq_gains = [1.0, 1.0, 1.0]
-
+    
         # Randomize effects
         st.sidebar.title("🎲 Randomize Effects")
         craziness = st.sidebar.slider("Craziness Level", 0.1, 1.0, 0.5)
         if st.sidebar.button("Randomize Effects"):
             apply_lowpass = random.random() < craziness
             cutoff_freq_low = random.randint(100, samplerate // 2) if apply_lowpass else 1000
-
+    
             apply_highpass = random.random() < craziness
             cutoff_freq_high = random.randint(20, samplerate // 2) if apply_highpass else 500
-
+    
             apply_reverb = random.random() < craziness
             reverb_decay = random.uniform(0.1, 1.0) if apply_reverb else 0.5
-
+    
             apply_bitcrusher = random.random() < craziness
             bit_depth = random.randint(4, 16) if apply_bitcrusher else 8
-
+    
             reverse_audio = random.random() < craziness
-
+    
             # Commented Out: Speed Change
             # apply_speed_change = random.random() < craziness
             # speed_factor = random.uniform(0.5, 2.0) if apply_speed_change else 1.0
-
+    
             # Commented Out: Pitch Shift
             # apply_pitch_shift = random.random() < craziness
             # pitch_shift_steps = random.randint(-12, 12) if apply_pitch_shift else 0
-
+    
             apply_amplify = random.random() < craziness
             amplification_factor = random.uniform(0.5, 3.0) if apply_amplify else 1.0
-
+    
             apply_echo = random.random() < craziness
             echo_delay = random.randint(100, 2000) if apply_echo else 500
             echo_decay = random.uniform(0.1, 1.0) if apply_echo else 0.5
-
+    
             apply_chorus_effect = random.random() < craziness
             apply_phaser_effect = random.random() < craziness
             apply_overdrive_effect = random.random() < craziness
-
+    
             apply_distortion_flag = random.random() < craziness
             distortion_gain = random.uniform(1.0, 10.0) if apply_distortion_flag else 1.0
             distortion_threshold = random.uniform(0.1, 1.0) if apply_distortion_flag else 0.3
-
+    
             apply_flanger_flag = random.random() < craziness
             flanger_delay = random.uniform(0.001, 0.02) if apply_flanger_flag else 0.005
             flanger_depth = random.uniform(0.001, 0.01) if apply_flanger_flag else 0.002
             flanger_rate = random.uniform(0.1, 5.0) if apply_flanger_flag else 0.25
-
+    
             apply_equalization_flag = random.random() < craziness
             if apply_equalization_flag:
                 selected_freqs = random.sample([300, 1000, 3000, 6000, 12000], random.randint(1, 3))
@@ -358,12 +416,13 @@ if audio_input is not None:
             else:
                 eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
                 eq_gains = [1.0, 1.0, 1.0]
-
+    
             st.sidebar.success("Effects randomized!")
-
-        # Apply effects
+    
+    # Apply effects
+    if uploaded_file is not None:
         processed_audio = audio_data
-
+    
         if apply_lowpass:
             try:
                 processed_audio, b_low, a_low = process_lowpass_filter(processed_audio, cutoff_freq_low, samplerate)
@@ -371,7 +430,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying lowpass filter: {e}")
                 logging.error(f"Error applying lowpass filter: {e}")
-
+    
         if apply_highpass:
             try:
                 processed_audio, b_high, a_high = process_highpass_filter(processed_audio, cutoff_freq_high, samplerate)
@@ -379,7 +438,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying highpass filter: {e}")
                 logging.error(f"Error applying highpass filter: {e}")
-
+    
         if apply_reverb:
             try:
                 processed_audio = add_reverb(processed_audio, reverb_decay)
@@ -387,7 +446,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error adding reverb: {e}")
                 logging.error(f"Error adding reverb: {e}")
-
+    
         if apply_bitcrusher:
             try:
                 processed_audio = process_bitcrusher(processed_audio, bit_depth)
@@ -395,7 +454,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying bitcrusher: {e}")
                 logging.error(f"Error applying bitcrusher: {e}")
-
+    
         if reverse_audio:
             try:
                 processed_audio = processed_audio[::-1]
@@ -403,7 +462,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error reversing audio: {e}")
                 logging.error(f"Error reversing audio: {e}")
-
+    
         # Commented Out: Speed Change
         # if apply_speed_change:
         #     try:
@@ -413,7 +472,7 @@ if audio_input is not None:
         #     except Exception as e:
         #         st.sidebar.error(f"Error changing speed: {e}")
         #         logging.error(f"Error changing speed: {e}")
-
+    
         # Commented Out: Pitch Shift
         # if apply_pitch_shift:
         #     try:
@@ -423,7 +482,7 @@ if audio_input is not None:
         #     except Exception as e:
         #         st.sidebar.error(f"Error applying pitch shift: {e}")
         #         logging.error(f"Error applying pitch shift: {e}")
-
+    
         if apply_amplify:
             try:
                 processed_audio = processed_audio * amplification_factor
@@ -432,7 +491,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error amplifying volume: {e}")
                 logging.error(f"Error amplifying volume: {e}")
-
+    
         if apply_echo:
             try:
                 delay_samples = int((echo_delay / 1000) * samplerate)
@@ -444,7 +503,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error adding echo: {e}")
                 logging.error(f"Error adding echo: {e}")
-
+    
         if apply_chorus_effect:
             try:
                 processed_audio = process_chorus(processed_audio, samplerate)
@@ -452,7 +511,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying chorus effect: {e}")
                 logging.error(f"Error applying chorus effect: {e}")
-
+    
         if apply_phaser_effect:
             try:
                 processed_audio = process_phaser(processed_audio, samplerate)
@@ -460,7 +519,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying phaser effect: {e}")
                 logging.error(f"Error applying phaser effect: {e}")
-
+    
         if apply_overdrive_effect:
             try:
                 processed_audio = process_overdrive(processed_audio)
@@ -468,7 +527,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying overdrive effect: {e}")
                 logging.error(f"Error applying overdrive effect: {e}")
-
+    
         if apply_distortion_flag:
             try:
                 processed_audio = process_distortion(processed_audio, gain=distortion_gain, threshold=distortion_threshold)
@@ -476,7 +535,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying distortion: {e}")
                 logging.error(f"Error applying distortion: {e}")
-
+    
         if apply_flanger_flag:
             try:
                 processed_audio = process_flanger(processed_audio, samplerate, delay=flanger_delay, depth=flanger_depth, rate=flanger_rate)
@@ -484,7 +543,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying flanger: {e}")
                 logging.error(f"Error applying flanger: {e}")
-
+    
         if apply_equalization_flag:
             try:
                 processed_audio = process_equalization(processed_audio, samplerate, gain_freqs=eq_gain_freqs, gains=eq_gains)
@@ -492,7 +551,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying equalization: {e}")
                 logging.error(f"Error applying equalization: {e}")
-
+    
         # Normalize the processed audio to prevent clipping
         try:
             audio_segment = AudioSegment(
@@ -506,7 +565,7 @@ if audio_input is not None:
         except Exception as e:
             st.sidebar.error(f"Error normalizing audio: {e}")
             logging.error(f"Error normalizing audio: {e}")
-
+    
         # Convert processed audio to bytes for playback and download
         try:
             buffer = io.BytesIO()
@@ -516,13 +575,13 @@ if audio_input is not None:
             st.error(f"Error preparing audio for playback/download: {e}")
             logging.error(f"Error preparing audio for playback/download: {e}")
             st.stop()
-
+    
         # Live Preview
         if live_preview:
             st.subheader("🎧 Live Preview - Processed Audio")
             st.audio(buffer, format='audio/wav')
             buffer.seek(0)  # Reset buffer position after playback
-
+    
         # Download processed audio
         st.subheader("💾 Download Processed Audio")
         st.download_button(
@@ -531,46 +590,46 @@ if audio_input is not None:
             file_name="processed_audio.wav",
             mime="audio/wav"
         )
-
+    
         # Enhanced Visualization
         st.subheader("📊 Enhanced Visualization")
-
+    
         # Waveform and Spectrogram Comparison
         try:
             fig, ax = plt.subplots(2, 2, figsize=(15, 10))
-
+    
             # Original Waveform
             ax[0, 0].plot(audio_data, color='blue')
             ax[0, 0].set_title("Original Audio Waveform")
             ax[0, 0].set_xlabel("Samples")
             ax[0, 0].set_ylabel("Amplitude")
-
+    
             # Processed Waveform
             ax[0, 1].plot(processed_audio, color='orange')
             ax[0, 1].set_title("Processed Audio Waveform")
             ax[0, 1].set_xlabel("Samples")
             ax[0, 1].set_ylabel("Amplitude")
-
+    
             # Original Spectrogram
             S_orig = librosa.stft(audio_data)
             S_db_orig = librosa.amplitude_to_db(np.abs(S_orig), ref=np.max)
             img_orig = librosa.display.specshow(S_db_orig, sr=samplerate, x_axis='time', y_axis='log', ax=ax[1, 0])
             ax[1, 0].set_title("Original Audio Spectrogram")
             fig.colorbar(img_orig, ax=ax[1, 0], format="%+2.f dB")
-
+    
             # Processed Spectrogram
             S_proc = librosa.stft(processed_audio)
             S_db_proc = librosa.amplitude_to_db(np.abs(S_proc), ref=np.max)
             img_proc = librosa.display.specshow(S_db_proc, sr=samplerate, x_axis='time', y_axis='log', ax=ax[1, 1])
             ax[1, 1].set_title("Processed Audio Spectrogram")
             fig.colorbar(img_proc, ax=ax[1, 1], format="%+2.f dB")
-
+    
             plt.tight_layout()
             st.pyplot(fig)
         except Exception as e:
             st.error(f"Error generating spectrogram visualization: {e}")
             logging.error(f"Error generating spectrogram visualization: {e}")
-
+    
         # Frequency Response Plot for Filters
         if apply_lowpass or apply_highpass:
             try:
@@ -590,6 +649,6 @@ if audio_input is not None:
             except Exception as e:
                 st.error(f"Error generating frequency response plot: {e}")
                 logging.error(f"Error generating frequency response plot: {e}")
-
+    
 else:
     st.info("📝 Please upload or record an audio file to get started.")
