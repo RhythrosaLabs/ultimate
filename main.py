@@ -36,6 +36,20 @@ def bitcrusher(audio_data, bit_depth=8):
     crushed_audio = np.round(audio_data / step) * step
     return crushed_audio
 
+def apply_chorus(audio_data, samplerate):
+    delay_samples = int(0.02 * samplerate)  # 20ms delay
+    chorus = np.zeros_like(audio_data)
+    for i in range(delay_samples, len(audio_data)):
+        chorus[i] = audio_data[i] + 0.5 * audio_data[i - delay_samples]
+    return chorus
+
+def apply_phaser(audio_data, samplerate):
+    phase_shift = np.sin(np.linspace(0, np.pi * 2, len(audio_data)))
+    return audio_data * (1 + 0.5 * phase_shift)
+
+def apply_overdrive(audio_data):
+    return np.clip(audio_data * 2, -1, 1)
+
 # App configuration
 st.set_page_config(
     page_title="Superpowered Audio Studio",
@@ -51,6 +65,12 @@ audio_input = st.audio_input("Record your audio")
 
 if audio_input:
     audio_data, samplerate = sf.read(audio_input)
+
+    # Ensure mono and float32 format for compatibility
+    if len(audio_data.shape) > 1:
+        audio_data = np.mean(audio_data, axis=1)
+    audio_data = audio_data.astype(np.float32)
+
     st.success("Audio successfully uploaded!")
 
     # Playback original audio
@@ -77,6 +97,9 @@ if audio_input:
     apply_echo = st.sidebar.checkbox("Add Echo")
     echo_delay = st.sidebar.slider("Echo Delay (ms)", 100, 2000, 500)
     echo_decay = st.sidebar.slider("Echo Decay Factor", 0.1, 1.0, 0.5)
+    apply_chorus_effect = st.sidebar.checkbox("Add Chorus")
+    apply_phaser_effect = st.sidebar.checkbox("Add Phaser")
+    apply_overdrive_effect = st.sidebar.checkbox("Add Overdrive")
 
     # Apply effects
     processed_audio = audio_data
@@ -108,7 +131,7 @@ if audio_input:
         st.sidebar.success(f"Audio speed changed by a factor of {speed_factor}")
 
     if apply_pitch_shift:
-        processed_audio = librosa.effects.pitch_shift(processed_audio.astype(np.float32), samplerate, n_steps=pitch_shift_steps)
+        processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
         st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} steps")
 
     if apply_amplify:
@@ -122,6 +145,18 @@ if audio_input:
             echo[i] = processed_audio[i - delay_samples] * echo_decay
         processed_audio = processed_audio + echo
         st.sidebar.success(f"Echo added with {echo_delay} ms delay and {echo_decay} decay factor")
+
+    if apply_chorus_effect:
+        processed_audio = apply_chorus(processed_audio, samplerate)
+        st.sidebar.success("Chorus effect applied!")
+
+    if apply_phaser_effect:
+        processed_audio = apply_phaser(processed_audio, samplerate)
+        st.sidebar.success("Phaser effect applied!")
+
+    if apply_overdrive_effect:
+        processed_audio = apply_overdrive(processed_audio)
+        st.sidebar.success("Overdrive effect applied!")
 
     # Save processed audio
     output_audio = io.BytesIO()
