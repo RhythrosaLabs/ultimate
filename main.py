@@ -59,8 +59,8 @@ st.set_page_config(
 st.title("\U0001F3A7 Superpowered Audio Studio")
 st.markdown("Record, enhance, and apply effects to your audio with ease!")
 
-# Audio upload section
-audio_input = st.file_uploader("Upload your audio file", type=["wav", "mp3", "flac"])
+# Audio recording section
+audio_input = st.audio_input("Record or upload your audio file")
 
 if audio_input:
     # Read audio data
@@ -71,7 +71,7 @@ if audio_input:
         audio_data = np.mean(audio_data, axis=1)
     audio_data = audio_data.astype(np.float32)
 
-    st.success("Audio successfully uploaded!")
+    st.success("Audio successfully uploaded or recorded!")
 
     # Playback original audio
     st.subheader("Playback Original Audio")
