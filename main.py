@@ -3,7 +3,6 @@ import soundfile as sf
 import numpy as np
 import io
 from scipy.signal import butter, lfilter
-from scipy.fftpack import fft
 import librosa
 from pydub.effects import normalize
 from pydub.generators import Sine
@@ -60,10 +59,11 @@ st.set_page_config(
 st.title("\U0001F3A7 Superpowered Audio Studio")
 st.markdown("Record, enhance, and apply effects to your audio with ease!")
 
-# Audio recording section
-audio_input = st.audio_input("Record your audio")
+# Audio upload section
+audio_input = st.file_uploader("Upload your audio file", type=["wav", "mp3", "flac"])
 
 if audio_input:
+    # Read audio data
     audio_data, samplerate = sf.read(audio_input)
 
     # Ensure mono and float32 format for compatibility
@@ -77,7 +77,7 @@ if audio_input:
     st.subheader("Playback Original Audio")
     st.audio(audio_input)
 
-    # User control for effects
+    # User controls for effects
     st.sidebar.title("Audio Effects")
     apply_lowpass = st.sidebar.checkbox("Apply Lowpass Filter")
     cutoff_freq_low = st.sidebar.slider("Lowpass Cutoff Frequency (Hz)", 100, samplerate // 2, 1000)
@@ -131,8 +131,11 @@ if audio_input:
         st.sidebar.success(f"Audio speed changed by a factor of {speed_factor}")
 
     if apply_pitch_shift:
-        processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
-        st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} steps")
+        try:
+            processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
+            st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} steps")
+        except Exception as e:
+            st.sidebar.error(f"Error applying pitch shift: {e}")
 
     if apply_amplify:
         processed_audio = processed_audio * amplification_factor
