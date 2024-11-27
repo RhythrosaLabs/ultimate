@@ -17,68 +17,67 @@ logging.basicConfig(filename='audio_studio.log', level=logging.ERROR,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
 # Utility functions for filtering audio
-def butter_lowpass_filter(data, cutoff, fs, order=5):
+def process_lowpass_filter(data, cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = lfilter(b, a, data)
     return y, b, a
 
-def butter_highpass_filter(data, cutoff, fs, order=5):
+def process_highpass_filter(data, cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = lfilter(b, a, data)
     return y, b, a
 
-def add_reverb(audio_data, decay_factor=0.5):
-    reverb = np.zeros_like(audio_data)
-    for i in range(1, len(audio_data)):
-        reverb[i] = audio_data[i] + decay_factor * reverb[i - 1]
+def add_reverb(data, decay_factor=0.5):
+    reverb = np.zeros_like(data)
+    for i in range(1, len(data)):
+        reverb[i] = data[i] + decay_factor * reverb[i - 1]
     return reverb
 
-def bitcrusher(audio_data, bit_depth=8):
-    max_amplitude = np.max(np.abs(audio_data))
+def process_bitcrusher(data, bit_depth=8):
+    max_amplitude = np.max(np.abs(data))
     step = max_amplitude / (2**bit_depth)
-    crushed_audio = np.round(audio_data / step) * step
+    crushed_audio = np.round(data / step) * step
     return crushed_audio
 
-def apply_chorus(audio_data, samplerate):
+def process_chorus(data, samplerate):
     delay_samples = int(0.02 * samplerate)  # 20ms delay
-    chorus = np.zeros_like(audio_data)
-    for i in range(delay_samples, len(audio_data)):
-        chorus[i] = audio_data[i] + 0.5 * audio_data[i - delay_samples]
+    chorus = np.zeros_like(data)
+    for i in range(delay_samples, len(data)):
+        chorus[i] = data[i] + 0.5 * data[i - delay_samples]
     return chorus
 
-def apply_phaser(audio_data, samplerate):
-    phase_shift = np.sin(np.linspace(0, np.pi * 2, len(audio_data)))
-    return audio_data * (1 + 0.5 * phase_shift)
+def process_phaser(data, samplerate):
+    phase_shift = np.sin(np.linspace(0, np.pi * 2, len(data)))
+    return data * (1 + 0.5 * phase_shift)
 
-def apply_overdrive(audio_data):
-    return np.clip(audio_data * 2, -1, 1)
+def process_overdrive(data):
+    return np.clip(data * 2, -1, 1)
 
 # Additional Effects
-def apply_distortion(audio_data, gain=1.0, threshold=0.3):
-    distorted = audio_data * gain
+def process_distortion(data, gain=1.0, threshold=0.3):
+    distorted = data * gain
     distorted = np.where(distorted > threshold, threshold, distorted)
     distorted = np.where(distorted < -threshold, -threshold, distorted)
     return distorted
 
-def apply_flanger(audio_data, samplerate, delay=0.005, depth=0.002, rate=0.25):
+def process_flanger(data, samplerate, delay=0.005, depth=0.002, rate=0.25):
     delay_samples = int(delay * samplerate)
     depth_samples = int(depth * samplerate)
-    flanger = np.zeros_like(audio_data)
-    for i in range(delay_samples, len(audio_data)):
-        flanger[i] = audio_data[i] + 0.7 * audio_data[i - delay_samples + depth_samples]
+    flanger = np.zeros_like(data)
+    for i in range(delay_samples, len(data)):
+        flanger[i] = data[i] + 0.7 * data[i - delay_samples + depth_samples]
     return flanger
 
-def apply_equalization(audio_data, samplerate, gain_freqs=(300, 1000, 3000), gains=(1.5, 1.0, 0.8)):
+def process_equalization(data, samplerate, gain_freqs=(300, 1000, 3000), gains=(1.5, 1.0, 0.8)):
     # Simple equalizer using band-pass filters
-    from scipy.signal import lfilter, butter
-    eq_audio = audio_data.copy()
+    eq_audio = data.copy()
     for freq, gain in zip(gain_freqs, gains):
         b, a = butter(2, freq / (0.5 * samplerate), btype='band')
-        eq_audio += gain * lfilter(b, a, audio_data)
+        eq_audio += gain * lfilter(b, a, data)
     eq_audio = np.clip(eq_audio, -1, 1)
     return eq_audio
 
@@ -355,7 +354,7 @@ if audio_input is not None:
 
         if apply_lowpass:
             try:
-                processed_audio, b_low, a_low = butter_lowpass_filter(processed_audio, cutoff_freq_low, samplerate)
+                processed_audio, b_low, a_low = process_lowpass_filter(processed_audio, cutoff_freq_low, samplerate)
                 st.sidebar.success(f"Lowpass filter applied at {cutoff_freq_low} Hz")
             except Exception as e:
                 st.sidebar.error(f"Error applying lowpass filter: {e}")
@@ -363,7 +362,7 @@ if audio_input is not None:
 
         if apply_highpass:
             try:
-                processed_audio, b_high, a_high = butter_highpass_filter(processed_audio, cutoff_freq_high, samplerate)
+                processed_audio, b_high, a_high = process_highpass_filter(processed_audio, cutoff_freq_high, samplerate)
                 st.sidebar.success(f"Highpass filter applied at {cutoff_freq_high} Hz")
             except Exception as e:
                 st.sidebar.error(f"Error applying highpass filter: {e}")
@@ -379,7 +378,7 @@ if audio_input is not None:
 
         if apply_bitcrusher:
             try:
-                processed_audio = bitcrusher(processed_audio, bit_depth)
+                processed_audio = process_bitcrusher(processed_audio, bit_depth)
                 st.sidebar.success(f"Bitcrusher applied with bit depth {bit_depth}")
             except Exception as e:
                 st.sidebar.error(f"Error applying bitcrusher: {e}")
@@ -432,7 +431,7 @@ if audio_input is not None:
 
         if apply_chorus_effect:
             try:
-                processed_audio = apply_chorus(processed_audio, samplerate)
+                processed_audio = process_chorus(processed_audio, samplerate)
                 st.sidebar.success("Chorus effect applied")
             except Exception as e:
                 st.sidebar.error(f"Error applying chorus effect: {e}")
@@ -440,7 +439,7 @@ if audio_input is not None:
 
         if apply_phaser_effect:
             try:
-                processed_audio = apply_phaser(processed_audio, samplerate)
+                processed_audio = process_phaser(processed_audio, samplerate)
                 st.sidebar.success("Phaser effect applied")
             except Exception as e:
                 st.sidebar.error(f"Error applying phaser effect: {e}")
@@ -448,7 +447,7 @@ if audio_input is not None:
 
         if apply_overdrive_effect:
             try:
-                processed_audio = apply_overdrive(processed_audio)
+                processed_audio = process_overdrive(processed_audio)
                 st.sidebar.success("Overdrive effect applied")
             except Exception as e:
                 st.sidebar.error(f"Error applying overdrive effect: {e}")
@@ -456,7 +455,7 @@ if audio_input is not None:
 
         if apply_distortion:
             try:
-                processed_audio = apply_distortion(processed_audio, gain=distortion_gain, threshold=distortion_threshold)
+                processed_audio = process_distortion(processed_audio, gain=distortion_gain, threshold=distortion_threshold)
                 st.sidebar.success(f"Distortion applied with gain {distortion_gain} and threshold {distortion_threshold}")
             except Exception as e:
                 st.sidebar.error(f"Error applying distortion: {e}")
@@ -464,7 +463,7 @@ if audio_input is not None:
 
         if apply_flanger:
             try:
-                processed_audio = apply_flanger(processed_audio, samplerate, delay=flanger_delay, depth=flanger_depth, rate=flanger_rate)
+                processed_audio = process_flanger(processed_audio, samplerate, delay=flanger_delay, depth=flanger_depth, rate=flanger_rate)
                 st.sidebar.success(f"Flanger applied with delay {flanger_delay}s, depth {flanger_depth}s, and rate {flanger_rate}Hz")
             except Exception as e:
                 st.sidebar.error(f"Error applying flanger: {e}")
@@ -472,8 +471,8 @@ if audio_input is not None:
 
         if apply_equalization:
             try:
-                processed_audio = apply_equalization(processed_audio, samplerate, gain_freqs=eq_gain_freqs, gains=eq_gains)
-                st.sidebar.success(f"Equalization applied on frequencies {eq_gain_freqs} with gains {eq_gains}")
+                processed_audio = process_equalization(processed_audio, samplerate, gain_freqs=eq_gain_freqs, gains=eq_gains)
+                st.sidebar.success(f"Equalization applied on frequencies {eq_gain_freqs} Hz with gains {eq_gains}")
             except Exception as e:
                 st.sidebar.error(f"Error applying equalization: {e}")
                 logging.error(f"Error applying equalization: {e}")
