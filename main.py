@@ -649,6 +649,6 @@ if uploaded_file is not None:
             except Exception as e:
                 st.error(f"Error generating frequency response plot: {e}")
                 logging.error(f"Error generating frequency response plot: {e}")
-    
+
 else:
     st.info("📝 Please upload or record an audio file to get started.")
