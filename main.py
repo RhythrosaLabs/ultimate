@@ -241,17 +241,23 @@ if audio_input is not None:
 
             reverse_audio = st.sidebar.checkbox("Reverse Audio")
 
+            # Commented Out: Speed Change
+            """
             apply_speed_change = st.sidebar.checkbox("Change Speed")
             if apply_speed_change:
                 speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
             else:
                 speed_factor = 1.0
+            """
 
+            # Commented Out: Pitch Shift
+            """
             apply_pitch_shift = st.sidebar.checkbox("Pitch Shift")
             if apply_pitch_shift:
                 pitch_shift_steps = st.sidebar.slider("Pitch Shift Steps", -12, 12, 0)
             else:
                 pitch_shift_steps = 0
+            """
 
             apply_amplify = st.sidebar.checkbox("Amplify Volume")
             if apply_amplify:
@@ -319,11 +325,17 @@ if audio_input is not None:
 
             reverse_audio = random.random() < craziness
 
+            # Commented Out: Speed Change
+            """
             apply_speed_change = random.random() < craziness
             speed_factor = random.uniform(0.5, 2.0) if apply_speed_change else 1.0
+            """
 
+            # Commented Out: Pitch Shift
+            """
             apply_pitch_shift = random.random() < craziness
             pitch_shift_steps = random.randint(-12, 12) if apply_pitch_shift else 0
+            """
 
             apply_amplify = random.random() < craziness
             amplification_factor = random.uniform(0.5, 3.0) if apply_amplify else 1.0
@@ -399,6 +411,8 @@ if audio_input is not None:
                 st.sidebar.error(f"Error reversing audio: {e}")
                 logging.error(f"Error reversing audio: {e}")
 
+        # Commented Out: Speed Change
+        """
         if apply_speed_change:
             try:
                 # Ensure processed_audio is a float32 numpy array
@@ -407,7 +421,10 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error changing speed: {e}")
                 logging.error(f"Error changing speed: {e}")
+        """
 
+        # Commented Out: Pitch Shift
+        """
         if apply_pitch_shift:
             try:
                 # Ensure processed_audio is a float32 numpy array
@@ -416,6 +433,7 @@ if audio_input is not None:
             except Exception as e:
                 st.sidebar.error(f"Error applying pitch shift: {e}")
                 logging.error(f"Error applying pitch shift: {e}")
+        """
 
         if apply_amplify:
             try:
@@ -481,7 +499,7 @@ if audio_input is not None:
         if apply_equalization_flag:
             try:
                 processed_audio = process_equalization(processed_audio, samplerate, gain_freqs=eq_gain_freqs, gains=eq_gains)
-                st.sidebar.success(f"Equalization applied on frequencies {eq_gain_freqs} Hz with gains {eq_gains}")
+                st.sidebar.success(f"Equalization applied on frequency bands {eq_gain_freqs} Hz with gains {eq_gains}")
             except Exception as e:
                 st.sidebar.error(f"Error applying equalization: {e}")
                 logging.error(f"Error applying equalization: {e}")
