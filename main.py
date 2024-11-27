@@ -71,14 +71,16 @@ def process_flanger(data, samplerate, delay=0.005, depth=0.002, rate=0.25):
         index = i - delay_samples + depth_samples
         if index < 0:
             index = 0
+        elif index >= len(data):
+            index = len(data) - 1
         flanger[i] = data[i] + 0.7 * data[index]
     return flanger
 
-def process_equalization(data, samplerate, gain_freqs=(300, 1000, 3000), gains=(1.5, 1.0, 0.8)):
+def process_equalization(data, samplerate, gain_freqs=[(250, 500), (750, 1500), (2250, 3750)], gains=[1.5, 1.0, 0.8]):
     # Simple equalizer using band-pass filters
     eq_audio = data.copy()
-    for freq, gain in zip(gain_freqs, gains):
-        b, a = butter(2, freq / (0.5 * samplerate), btype='band')
+    for (low, high), gain in zip(gain_freqs, gains):
+        b, a = butter(2, [low / (0.5 * samplerate), high / (0.5 * samplerate)], btype='band')
         eq_audio += gain * lfilter(b, a, data)
     eq_audio = np.clip(eq_audio, -1, 1)
     return eq_audio
@@ -98,11 +100,11 @@ PRESETS = {
         "apply_echo": True, "echo_delay": 800, "echo_decay": 0.6,
     },
     "Distorted Rock": {
-        "apply_distortion": True, "distortion_gain": 2.0, "distortion_threshold": 0.3,
-        "apply_flanger": True, "flanger_delay": 0.005, "flanger_depth": 0.002, "flanger_rate": 0.25,
+        "apply_distortion_flag": True, "distortion_gain": 2.0, "distortion_threshold": 0.3,
+        "apply_flanger_flag": True, "flanger_delay": 0.005, "flanger_depth": 0.002, "flanger_rate": 0.25,
     },
     "Equalized Pop": {
-        "apply_equalization": True, "eq_gain_freqs": (300, 1000, 3000), "eq_gains": (1.5, 1.0, 0.8),
+        "apply_equalization_flag": True, "eq_gain_freqs": [(300, 600), (1000, 2000), (3000, 6000)], "eq_gains": [1.5, 1.0, 0.8],
     }
 }
 
@@ -198,16 +200,16 @@ if audio_input is not None:
             apply_chorus_effect = False
             apply_phaser_effect = False
             apply_overdrive_effect = False
-            apply_distortion = False
+            apply_distortion_flag = False
             distortion_gain = 1.0
             distortion_threshold = 0.3
-            apply_flanger = False
+            apply_flanger_flag = False
             flanger_delay = 0.005
             flanger_depth = 0.002
             flanger_rate = 0.25
-            apply_equalization = False
-            eq_gain_freqs = (300, 1000, 3000)
-            eq_gains = (1.0, 1.0, 1.0)
+            apply_equalization_flag = False
+            eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
+            eq_gains = [1.5, 1.0, 0.8]
 
             # Update settings based on preset
             for key, value in preset_settings.items():
@@ -268,16 +270,16 @@ if audio_input is not None:
             apply_chorus_effect = st.sidebar.checkbox("Add Chorus")
             apply_phaser_effect = st.sidebar.checkbox("Add Phaser")
             apply_overdrive_effect = st.sidebar.checkbox("Add Overdrive")
-            apply_distortion = st.sidebar.checkbox("Apply Distortion")
-            if apply_distortion:
+            apply_distortion_flag = st.sidebar.checkbox("Apply Distortion")
+            if apply_distortion_flag:
                 distortion_gain = st.sidebar.slider("Distortion Gain", 1.0, 10.0, 2.0)
                 distortion_threshold = st.sidebar.slider("Distortion Threshold", 0.1, 1.0, 0.3)
             else:
                 distortion_gain = 1.0
                 distortion_threshold = 0.3
 
-            apply_flanger = st.sidebar.checkbox("Add Flanger")
-            if apply_flanger:
+            apply_flanger_flag = st.sidebar.checkbox("Add Flanger")
+            if apply_flanger_flag:
                 flanger_delay = st.sidebar.slider("Flanger Delay (s)", 0.001, 0.02, 0.005)
                 flanger_depth = st.sidebar.slider("Flanger Depth (s)", 0.001, 0.01, 0.002)
                 flanger_rate = st.sidebar.slider("Flanger Rate (Hz)", 0.1, 5.0, 0.25)
@@ -286,16 +288,18 @@ if audio_input is not None:
                 flanger_depth = 0.002
                 flanger_rate = 0.25
 
-            apply_equalization = st.sidebar.checkbox("Add Equalization")
-            if apply_equalization:
+            apply_equalization_flag = st.sidebar.checkbox("Add Equalization")
+            if apply_equalization_flag:
                 eq_gain_freqs = st.sidebar.multiselect("Select Frequency Bands for EQ", [300, 1000, 3000, 6000, 12000], default=[300, 1000, 3000])
                 eq_gains = []
                 for freq in eq_gain_freqs:
                     gain = st.sidebar.slider(f"Gain for {freq} Hz", 0.5, 2.0, 1.0, step=0.1)
                     eq_gains.append(gain)
+                # Convert list to list of tuples for bandpass
+                eq_gain_freqs = [(freq - 100, freq + 100) for freq in eq_gain_freqs]
             else:
-                eq_gain_freqs = (300, 1000, 3000)
-                eq_gains = (1.0, 1.0, 1.0)
+                eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
+                eq_gains = [1.0, 1.0, 1.0]
 
         # Randomize effects
         st.sidebar.title("🎲 Randomize Effects")
@@ -332,22 +336,23 @@ if audio_input is not None:
             apply_phaser_effect = random.random() < craziness
             apply_overdrive_effect = random.random() < craziness
 
-            apply_distortion = random.random() < craziness
-            distortion_gain = random.uniform(1.0, 10.0) if apply_distortion else 1.0
-            distortion_threshold = random.uniform(0.1, 1.0) if apply_distortion else 0.3
+            apply_distortion_flag = random.random() < craziness
+            distortion_gain = random.uniform(1.0, 10.0) if apply_distortion_flag else 1.0
+            distortion_threshold = random.uniform(0.1, 1.0) if apply_distortion_flag else 0.3
 
-            apply_flanger = random.random() < craziness
-            flanger_delay = random.uniform(0.001, 0.02) if apply_flanger else 0.005
-            flanger_depth = random.uniform(0.001, 0.01) if apply_flanger else 0.002
-            flanger_rate = random.uniform(0.1, 5.0) if apply_flanger else 0.25
+            apply_flanger_flag = random.random() < craziness
+            flanger_delay = random.uniform(0.001, 0.02) if apply_flanger_flag else 0.005
+            flanger_depth = random.uniform(0.001, 0.01) if apply_flanger_flag else 0.002
+            flanger_rate = random.uniform(0.1, 5.0) if apply_flanger_flag else 0.25
 
-            apply_equalization = random.random() < craziness
-            if apply_equalization:
-                eq_gain_freqs = random.sample([300, 1000, 3000, 6000, 12000], random.randint(1, 3))
-                eq_gains = [random.uniform(0.5, 2.0) for _ in eq_gain_freqs]
+            apply_equalization_flag = random.random() < craziness
+            if apply_equalization_flag:
+                selected_freqs = random.sample([300, 1000, 3000, 6000, 12000], random.randint(1, 3))
+                eq_gain_freqs = [(freq - 100, freq + 100) for freq in selected_freqs]
+                eq_gains = [random.uniform(0.5, 2.0) for _ in selected_freqs]
             else:
-                eq_gain_freqs = (300, 1000, 3000)
-                eq_gains = (1.0, 1.0, 1.0)
+                eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
+                eq_gains = [1.0, 1.0, 1.0]
 
             st.sidebar.success("Effects randomized!")
 
@@ -457,23 +462,23 @@ if audio_input is not None:
                 st.sidebar.error(f"Error applying overdrive effect: {e}")
                 logging.error(f"Error applying overdrive effect: {e}")
 
-        if apply_distortion:
+        if apply_distortion_flag:
             try:
                 processed_audio = process_distortion(processed_audio, gain=distortion_gain, threshold=distortion_threshold)
-                st.sidebar.success(f"Distortion applied with gain {distortion_gain} and threshold {distortion_threshold}")
+                st.sidebar.success(f"Distortion applied with gain {distortion_gain:.2f} and threshold {distortion_threshold:.2f}")
             except Exception as e:
                 st.sidebar.error(f"Error applying distortion: {e}")
                 logging.error(f"Error applying distortion: {e}")
 
-        if apply_flanger:
+        if apply_flanger_flag:
             try:
                 processed_audio = process_flanger(processed_audio, samplerate, delay=flanger_delay, depth=flanger_depth, rate=flanger_rate)
-                st.sidebar.success(f"Flanger applied with delay {flanger_delay}s, depth {flanger_depth}s, and rate {flanger_rate}Hz")
+                st.sidebar.success(f"Flanger applied with delay {flanger_delay:.3f}s, depth {flanger_depth:.3f}s, and rate {flanger_rate:.2f}Hz")
             except Exception as e:
                 st.sidebar.error(f"Error applying flanger: {e}")
                 logging.error(f"Error applying flanger: {e}")
 
-        if apply_equalization:
+        if apply_equalization_flag:
             try:
                 processed_audio = process_equalization(processed_audio, samplerate, gain_freqs=eq_gain_freqs, gains=eq_gains)
                 st.sidebar.success(f"Equalization applied on frequencies {eq_gain_freqs} Hz with gains {eq_gains}")
