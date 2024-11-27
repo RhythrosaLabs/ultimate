@@ -188,10 +188,11 @@ if audio_input is not None:
             apply_bitcrusher = False
             bit_depth = 8
             reverse_audio = False
-            apply_speed_change = False
-            speed_factor = 1.0
-            apply_pitch_shift = False
-            pitch_shift_steps = 0
+            # Speed Change and Pitch Shift are commented out
+            # apply_speed_change = False
+            # speed_factor = 1.0
+            # apply_pitch_shift = False
+            # pitch_shift_steps = 0
             apply_amplify = False
             amplification_factor = 1.0
             apply_echo = False
@@ -242,22 +243,18 @@ if audio_input is not None:
             reverse_audio = st.sidebar.checkbox("Reverse Audio")
 
             # Commented Out: Speed Change
-            """
-            apply_speed_change = st.sidebar.checkbox("Change Speed")
-            if apply_speed_change:
-                speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
-            else:
-                speed_factor = 1.0
-            """
+            # apply_speed_change = st.sidebar.checkbox("Change Speed")
+            # if apply_speed_change:
+            #     speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
+            # else:
+            #     speed_factor = 1.0
 
             # Commented Out: Pitch Shift
-            """
-            apply_pitch_shift = st.sidebar.checkbox("Pitch Shift")
-            if apply_pitch_shift:
-                pitch_shift_steps = st.sidebar.slider("Pitch Shift Steps", -12, 12, 0)
-            else:
-                pitch_shift_steps = 0
-            """
+            # apply_pitch_shift = st.sidebar.checkbox("Pitch Shift")
+            # if apply_pitch_shift:
+            #     pitch_shift_steps = st.sidebar.slider("Pitch Shift Steps", -12, 12, 0)
+            # else:
+            #     pitch_shift_steps = 0
 
             apply_amplify = st.sidebar.checkbox("Amplify Volume")
             if apply_amplify:
@@ -326,16 +323,12 @@ if audio_input is not None:
             reverse_audio = random.random() < craziness
 
             # Commented Out: Speed Change
-            """
-            apply_speed_change = random.random() < craziness
-            speed_factor = random.uniform(0.5, 2.0) if apply_speed_change else 1.0
-            """
+            # apply_speed_change = random.random() < craziness
+            # speed_factor = random.uniform(0.5, 2.0) if apply_speed_change else 1.0
 
             # Commented Out: Pitch Shift
-            """
-            apply_pitch_shift = random.random() < craziness
-            pitch_shift_steps = random.randint(-12, 12) if apply_pitch_shift else 0
-            """
+            # apply_pitch_shift = random.random() < craziness
+            # pitch_shift_steps = random.randint(-12, 12) if apply_pitch_shift else 0
 
             apply_amplify = random.random() < craziness
             amplification_factor = random.uniform(0.5, 3.0) if apply_amplify else 1.0
@@ -412,28 +405,24 @@ if audio_input is not None:
                 logging.error(f"Error reversing audio: {e}")
 
         # Commented Out: Speed Change
-        """
-        if apply_speed_change:
-            try:
-                # Ensure processed_audio is a float32 numpy array
-                processed_audio = librosa.effects.time_stretch(processed_audio, speed_factor)
-                st.sidebar.success(f"Speed changed by a factor of {speed_factor}")
-            except Exception as e:
-                st.sidebar.error(f"Error changing speed: {e}")
-                logging.error(f"Error changing speed: {e}")
-        """
+        # if apply_speed_change:
+        #     try:
+        #         # Ensure processed_audio is a float32 numpy array
+        #         processed_audio = librosa.effects.time_stretch(processed_audio, speed_factor)
+        #         st.sidebar.success(f"Speed changed by a factor of {speed_factor}")
+        #     except Exception as e:
+        #         st.sidebar.error(f"Error changing speed: {e}")
+        #         logging.error(f"Error changing speed: {e}")
 
         # Commented Out: Pitch Shift
-        """
-        if apply_pitch_shift:
-            try:
-                # Ensure processed_audio is a float32 numpy array
-                processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
-                st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} semitones")
-            except Exception as e:
-                st.sidebar.error(f"Error applying pitch shift: {e}")
-                logging.error(f"Error applying pitch shift: {e}")
-        """
+        # if apply_pitch_shift:
+        #     try:
+        #         # Ensure processed_audio is a float32 numpy array
+        #         processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
+        #         st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} semitones")
+        #     except Exception as e:
+        #         st.sidebar.error(f"Error applying pitch shift: {e}")
+        #         logging.error(f"Error applying pitch shift: {e}")
 
         if apply_amplify:
             try:
