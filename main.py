@@ -6,7 +6,6 @@ from scipy.signal import butter, lfilter, freqz
 import librosa
 import librosa.display
 from pydub.effects import normalize
-from pydub.generators import Sine
 from pydub import AudioSegment
 import random
 import matplotlib.pyplot as plt
@@ -69,7 +68,10 @@ def process_flanger(data, samplerate, delay=0.005, depth=0.002, rate=0.25):
     depth_samples = int(depth * samplerate)
     flanger = np.zeros_like(data)
     for i in range(delay_samples, len(data)):
-        flanger[i] = data[i] + 0.7 * data[i - delay_samples + depth_samples]
+        index = i - delay_samples + depth_samples
+        if index < 0:
+            index = 0
+        flanger[i] = data[i] + 0.7 * data[index]
     return flanger
 
 def process_equalization(data, samplerate, gain_freqs=(300, 1000, 3000), gains=(1.5, 1.0, 0.8)):
@@ -394,6 +396,7 @@ if audio_input is not None:
 
         if apply_speed_change:
             try:
+                # Ensure processed_audio is a float32 numpy array
                 processed_audio = librosa.effects.time_stretch(processed_audio, speed_factor)
                 st.sidebar.success(f"Speed changed by a factor of {speed_factor}")
             except Exception as e:
@@ -402,6 +405,7 @@ if audio_input is not None:
 
         if apply_pitch_shift:
             try:
+                # Ensure processed_audio is a float32 numpy array
                 processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
                 st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} semitones")
             except Exception as e:
@@ -561,10 +565,10 @@ if audio_input is not None:
                 fig2, ax2 = plt.subplots(figsize=(10, 5))
                 if apply_lowpass:
                     w_low, h_low = freqz(b_low, a_low, worN=8000)
-                    ax2.plot(0.5*samplerate*w_low/np.pi, np.abs(h_low), label=f'Lowpass ({cutoff_freq_low} Hz)')
+                    ax2.plot(0.5 * samplerate * w_low / np.pi, np.abs(h_low), label=f'Lowpass ({cutoff_freq_low} Hz)')
                 if apply_highpass:
                     w_high, h_high = freqz(b_high, a_high, worN=8000)
-                    ax2.plot(0.5*samplerate*w_high/np.pi, np.abs(h_high), label=f'Highpass ({cutoff_freq_high} Hz)')
+                    ax2.plot(0.5 * samplerate * w_high / np.pi, np.abs(h_high), label=f'Highpass ({cutoff_freq_high} Hz)')
                 ax2.set_title("Frequency Response")
                 ax2.set_xlabel("Frequency (Hz)")
                 ax2.set_ylabel("Gain")
