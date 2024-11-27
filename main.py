@@ -2,17 +2,39 @@ import streamlit as st
 import soundfile as sf
 import numpy as np
 import io
-from scipy.signal import butter, lfilter, freqz
+from scipy.signal import butter, lfilter
 from scipy.fftpack import fft
 import librosa
+from pydub.effects import normalize
+from pydub.generators import Sine
+from pydub import AudioSegment
 
-# Utility function for filtering audio
+# Utility functions for filtering audio
 def butter_lowpass_filter(data, cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = lfilter(b, a, data)
     return y
+
+def butter_highpass_filter(data, cutoff, fs, order=5):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+    y = lfilter(b, a, data)
+    return y
+
+def add_reverb(audio_data, decay_factor=0.5):
+    reverb = np.zeros_like(audio_data)
+    for i in range(1, len(audio_data)):
+        reverb[i] = audio_data[i] + decay_factor * reverb[i - 1]
+    return reverb
+
+def bitcrusher(audio_data, bit_depth=8):
+    max_amplitude = np.max(np.abs(audio_data))
+    step = max_amplitude / (2**bit_depth)
+    crushed_audio = np.round(audio_data / step) * step
+    return crushed_audio
 
 # App configuration
 st.set_page_config(
@@ -38,7 +60,13 @@ if audio_input:
     # User control for effects
     st.sidebar.title("Audio Effects")
     apply_lowpass = st.sidebar.checkbox("Apply Lowpass Filter")
-    cutoff_freq = st.sidebar.slider("Lowpass Cutoff Frequency (Hz)", 100, samplerate // 2, 1000)
+    cutoff_freq_low = st.sidebar.slider("Lowpass Cutoff Frequency (Hz)", 100, samplerate // 2, 1000)
+    apply_highpass = st.sidebar.checkbox("Apply Highpass Filter")
+    cutoff_freq_high = st.sidebar.slider("Highpass Cutoff Frequency (Hz)", 20, samplerate // 2, 500)
+    apply_reverb = st.sidebar.checkbox("Add Reverb")
+    reverb_decay = st.sidebar.slider("Reverb Decay Factor", 0.1, 1.0, 0.5)
+    apply_bitcrusher = st.sidebar.checkbox("Apply Bitcrusher")
+    bit_depth = st.sidebar.slider("Bit Depth", 4, 16, 8)
     reverse_audio = st.sidebar.checkbox("Reverse Audio")
     apply_speed_change = st.sidebar.checkbox("Change Speed")
     speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
@@ -54,8 +82,20 @@ if audio_input:
     processed_audio = audio_data
 
     if apply_lowpass:
-        processed_audio = butter_lowpass_filter(processed_audio, cutoff_freq, samplerate)
-        st.sidebar.success(f"Lowpass filter applied at {cutoff_freq} Hz")
+        processed_audio = butter_lowpass_filter(processed_audio, cutoff_freq_low, samplerate)
+        st.sidebar.success(f"Lowpass filter applied at {cutoff_freq_low} Hz")
+
+    if apply_highpass:
+        processed_audio = butter_highpass_filter(processed_audio, cutoff_freq_high, samplerate)
+        st.sidebar.success(f"Highpass filter applied at {cutoff_freq_high} Hz")
+
+    if apply_reverb:
+        processed_audio = add_reverb(processed_audio, reverb_decay)
+        st.sidebar.success(f"Reverb added with decay factor {reverb_decay}")
+
+    if apply_bitcrusher:
+        processed_audio = bitcrusher(processed_audio, bit_depth)
+        st.sidebar.success(f"Bitcrusher applied with {bit_depth}-bit depth")
 
     if reverse_audio:
         processed_audio = processed_audio[::-1]
