@@ -1,77 +1,75 @@
 import streamlit as st
+import soundfile as sf
 import numpy as np
-import wave
-import os
-from pydub import AudioSegment
-from pydub.playback import play
+import io
+from scipy.signal import butter, lfilter
 
-# App Title
-st.title("Crazy Multi-Track Audio Editor")
+# Utility function for filtering audio
+def butter_lowpass_filter(data, cutoff, fs, order=5):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    y = lfilter(b, a, data)
+    return y
 
-# Upload or record multiple audio tracks
-st.sidebar.header("Upload or Record Tracks")
-num_tracks = st.sidebar.slider("Number of Tracks", 1, 5, 2)
+# App configuration
+st.set_page_config(
+    page_title="Superpowered Audio Studio",
+    page_icon="\U0001F3A7",
+    layout="wide"
+)
 
-tracks = []
+st.title("\U0001F3A7 Superpowered Audio Studio")
+st.markdown("Record, enhance, and apply effects to your audio with ease!")
 
-for i in range(num_tracks):
-    st.sidebar.write(f"Track {i + 1}")
-    audio_file = st.sidebar.file_uploader(f"Upload Track {i + 1}", type=["wav", "mp3"], key=f"file_{i}")
-    if audio_file:
-        tracks.append(audio_file)
+# Audio recording section
+audio_input = st.audio_input("Record your audio")
 
-    # Add recording (Placeholder for recording - requires frontend integration for real recording)
-    audio_value = st.sidebar.audio_input(f"Record Track {i + 1}", key=f"record_{i}")
-    if audio_value:
-        tracks.append(audio_value)
+if audio_input:
+    audio_data, samplerate = sf.read(audio_input)
+    st.success("Audio successfully uploaded!")
 
-# Mixing Interface
-st.header("Mixing Desk")
-st.write("Adjust the volume of each track and see a waveform preview (if uploaded).")
+    # Playback original audio
+    st.subheader("Playback Original Audio")
+    st.audio(audio_input)
 
-mixed_audio = None
-volume_levels = []
+    # User control for effects
+    st.sidebar.title("Audio Effects")
+    apply_lowpass = st.sidebar.checkbox("Apply Lowpass Filter")
+    cutoff_freq = st.sidebar.slider("Lowpass Cutoff Frequency (Hz)", 100, samplerate // 2, 1000)
+    reverse_audio = st.sidebar.checkbox("Reverse Audio")
+    apply_speed_change = st.sidebar.checkbox("Change Speed")
+    speed_factor = st.sidebar.slider("Speed Factor", 0.5, 2.0, 1.0)
 
-for i, track in enumerate(tracks):
-    st.subheader(f"Track {i + 1}")
-    
-    # Display uploaded track
-    st.audio(track)
+    # Apply effects
+    processed_audio = audio_data
 
-    # Load and visualize waveform
-    file_path = f"temp_audio_{i}.wav"
-    with open(file_path, "wb") as f:
-        f.write(track.read())
+    if apply_lowpass:
+        processed_audio = butter_lowpass_filter(processed_audio, cutoff_freq, samplerate)
+        st.sidebar.success(f"Lowpass filter applied at {cutoff_freq} Hz")
 
-    audio = AudioSegment.from_file(file_path)
-    os.remove(file_path)
+    if reverse_audio:
+        processed_audio = processed_audio[::-1]
+        st.sidebar.success("Audio reversed!")
 
-    st.write("Waveform Preview:")
-    samples = np.array(audio.get_array_of_samples())
-    st.line_chart(samples[:500])  # Preview limited to the first 500 samples
-    
-    # Volume control
-    volume = st.slider(f"Volume for Track {i + 1}", -20.0, 6.0, 0.0)
-    volume_levels.append(volume)
+    if apply_speed_change:
+        indices = np.round(np.arange(0, len(processed_audio), speed_factor)).astype(int)
+        indices = indices[indices < len(processed_audio)]
+        processed_audio = processed_audio[indices]
+        st.sidebar.success(f"Audio speed changed by a factor of {speed_factor}")
 
-    # Apply volume
-    adjusted_audio = audio + volume
-    
-    if mixed_audio:
-        mixed_audio = mixed_audio.overlay(adjusted_audio)
-    else:
-        mixed_audio = adjusted_audio
+    # Save processed audio
+    output_audio = io.BytesIO()
+    sf.write(output_audio, processed_audio, samplerate, format='WAV')
+    output_audio.seek(0)
 
-# Playback and Export
-if st.button("Play Mixed Audio"):
-    st.write("Playing Mixed Audio...")
-    mixed_audio.export("mixed_output.wav", format="wav")
-    st.audio("mixed_output.wav")
+    # Playback processed audio
+    st.subheader("Playback Processed Audio")
+    st.audio(output_audio)
 
-if st.button("Export Mixed Audio"):
-    st.write("Exporting...")
-    mixed_audio.export("mixed_output.wav", format="wav")
-    with open("mixed_output.wav", "rb") as f:
-        st.download_button("Download Mixed Audio", f, file_name="mixed_output.wav")
+    # Allow user to download the processed audio
+    st.download_button("Download Processed Audio", output_audio, file_name="processed_audio.wav")
 
-st.write("This is a basic implementation. Advanced features like effects, precise editing, and transitions can be added later.")
+# Footer
+st.markdown("---")
+st.caption("Powered by Streamlit \U0001F680 | Experiment with audio like never before!")
