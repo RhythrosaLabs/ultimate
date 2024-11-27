@@ -167,9 +167,90 @@ if audio_input:
         processed_audio = add_reverb(processed_audio, reverb_decay)
         st.sidebar.success(f"Reverb added with decay factor {reverb_decay}")
 
-    if apply_bitcrusher:
-        processed_audio = bitcrusher(processed_audio, bit_depth)
-        st.sidebar.success(f"Bitcrusher applied with {bit_depth}-bit depth")
+                st.sidebar.success(f"Bitcrusher applied with bit depth {bit_depth}")
 
-    if reverse_audio:
-        processed
+        if reverse_audio:
+            processed_audio = processed_audio[::-1]
+            st.sidebar.success("Audio reversed")
+
+        if apply_speed_change:
+            processed_audio = librosa.effects.time_stretch(processed_audio, speed_factor)
+            st.sidebar.success(f"Speed changed by a factor of {speed_factor}")
+
+        if apply_pitch_shift:
+            processed_audio = librosa.effects.pitch_shift(processed_audio, samplerate, n_steps=pitch_shift_steps)
+            st.sidebar.success(f"Pitch shifted by {pitch_shift_steps} semitones")
+
+        if apply_amplify:
+            processed_audio = processed_audio * amplification_factor
+            processed_audio = np.clip(processed_audio, -1.0, 1.0)
+            st.sidebar.success(f"Volume amplified by a factor of {amplification_factor}")
+
+        if apply_echo:
+            delay_samples = int((echo_delay / 1000) * samplerate)
+            echo = np.zeros_like(processed_audio)
+            for i in range(delay_samples, len(processed_audio)):
+                echo[i] = processed_audio[i] + echo_decay * processed_audio[i - delay_samples]
+            processed_audio = echo
+            st.sidebar.success(f"Echo added with delay {echo_delay} ms and decay factor {echo_decay}")
+
+        if apply_chorus_effect:
+            processed_audio = apply_chorus(processed_audio, samplerate)
+            st.sidebar.success("Chorus effect applied")
+
+        if apply_phaser_effect:
+            processed_audio = apply_phaser(processed_audio, samplerate)
+            st.sidebar.success("Phaser effect applied")
+
+        if apply_overdrive_effect:
+            processed_audio = apply_overdrive(processed_audio)
+            st.sidebar.success("Overdrive effect applied")
+
+        # Normalize the processed audio to prevent clipping
+        processed_audio = normalize(AudioSegment(
+            processed_audio.tobytes(),
+            frame_rate=samplerate,
+            sample_width=processed_audio.dtype.itemsize,
+            channels=1
+        )).get_array_of_samples()
+        processed_audio = np.array(processed_audio).astype(np.float32) / np.iinfo(processed_audio.dtype).max
+
+        # Convert processed audio to bytes for playback and download
+        buffer = io.BytesIO()
+        sf.write(buffer, processed_audio, samplerate, format='WAV')
+        buffer.seek(0)
+
+        # Live Preview
+        if live_preview:
+            st.subheader("Live Preview - Processed Audio")
+            st.audio(buffer, format='audio/wav')
+
+        # Download processed audio
+        st.subheader("Download Processed Audio")
+        st.download_button(
+            label="Download WAV",
+            data=buffer,
+            file_name="processed_audio.wav",
+            mime="audio/wav"
+        )
+
+        # Visualization (Optional)
+        st.subheader("Waveform Comparison")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(2, 1, figsize=(10, 6))
+        ax[0].plot(audio_data, color='blue')
+        ax[0].set_title("Original Audio")
+        ax[0].set_xlabel("Samples")
+        ax[0].set_ylabel("Amplitude")
+
+        ax[1].plot(processed_audio, color='orange')
+        ax[1].set_title("Processed Audio")
+        ax[1].set_xlabel("Samples")
+        ax[1].set_ylabel("Amplitude")
+
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    else:
+        st.info("Please upload or record an audio file to get started.")
