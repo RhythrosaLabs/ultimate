@@ -550,7 +550,6 @@ with tabs[2]:
                 params['rate'] = rate
                 params['depth'] = depth
             # Include other effect parameters as needed
-            # ...
             effect_params[effect] = params
 
 # Synthesizer Tab
@@ -643,8 +642,17 @@ with tabs[3]:
             index=sequence_patterns.index(preset_params['sequence_pattern']) if preset_params else 0,
             help="Choose a pattern for the sequencer."
         )
+        # Adjustable sequence duration
+        sequence_duration = st.slider(
+            "Sequence Duration (seconds)",
+            min_value=0.1,
+            max_value=duration,
+            value=0.5,
+            help="Set the duration for each sequence in the sequencer."
+        )
     else:
         sequence_pattern = 'Random'
+        sequence_duration = 0.5
 
 # Session Management Tab
 with tabs[4]:
@@ -725,6 +733,7 @@ with tabs[4]:
         )
         if st.button("Load Selected Preset"):
             loaded_params = load_preset(load_preset_name)
+            st.session_state['loaded_params'] = loaded_params
             st.success(f"Preset '{load_preset_name}' loaded!")
             st.experimental_rerun()
     else:
@@ -841,7 +850,7 @@ if st.button("🎶 Generate Noise"):
             tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
         else:
             tone = np.zeros_like(t)
-        if envelope:
+        if envelope is not None:
             tone *= envelope
         return tone
 
@@ -1074,11 +1083,17 @@ if st.button("🎶 Generate Noise"):
             arpeggiated_data[start:end] = data[start:end]
         return arpeggiated_data
 
-    def apply_sequencer(data, sample_rate, pattern='Random'):
-        # Sequencer effect
-        sequence_length = int(sample_rate * 0.5)  # 0.5 seconds per sequence
-        num_sequences = len(data) // sequence_length
+    def apply_sequencer(data, sample_rate, pattern='Random', sequence_duration=0.5):
+        # Sequencer effect with adjustable sequence duration
+        sequence_length = int(sample_rate * sequence_duration)
+        if sequence_length > len(data):
+            sequence_length = len(data)
+        num_sequences = max(len(data) // sequence_length, 1)
         sequences = [data[i*sequence_length:(i+1)*sequence_length] for i in range(num_sequences)]
+        # Handle any remaining samples
+        remaining_samples = len(data) % sequence_length
+        if remaining_samples > 0 and len(sequences) > 0:
+            sequences.append(data[-remaining_samples:])
         if pattern == 'Ascending':
             pass
         elif pattern == 'Descending':
@@ -1351,8 +1366,8 @@ if st.button("🎶 Generate Noise"):
 
         # Apply sequencer
         if sequencer:
-            combined_data = apply_sequencer(combined_data, sample_rate, pattern=sequence_pattern)
-            plot_data = apply_sequencer(plot_data, sample_rate, pattern=sequence_pattern)
+            combined_data = apply_sequencer(combined_data, sample_rate, pattern=sequence_pattern, sequence_duration=sequence_duration)
+            plot_data = apply_sequencer(plot_data, sample_rate, pattern=sequence_pattern, sequence_duration=sequence_duration)
 
         # Apply effects in chain order
         for effect in effects_chain:
