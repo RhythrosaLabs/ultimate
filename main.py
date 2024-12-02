@@ -602,6 +602,3 @@ if audio_processor.audio_frames:
             except Exception as e:
                 st.error(f"Error generating frequency response plot: {e}")
                 logging.error(f"Error generating frequency response plot: {e}")
-
-else:
-    st.info("📝 Please record some audio to get started.")
