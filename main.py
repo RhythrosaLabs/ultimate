@@ -165,21 +165,22 @@ if st.button("Process and Download Audio"):
         else:
             # Concatenate all recorded audio frames
             recorded_audio = np.concatenate(audio_processor.audio_frames)
-            
+            samplerate = 44100  # Default sample rate; adjust if necessary
+
             # Normalize audio
             if np.max(np.abs(recorded_audio)) == 0:
                 st.warning("Recorded audio is silent.")
                 st.stop()
             recorded_audio = recorded_audio / np.max(np.abs(recorded_audio))
-            
+
             # Convert to 16-bit PCM
             recorded_audio_int16 = (recorded_audio * 32767).astype(np.int16)
-            
+
             # Create a BytesIO buffer
             buffer = io.BytesIO()
-            sf.write(buffer, recorded_audio_int16, 44100, format='WAV')  # Adjust sample rate if necessary
+            sf.write(buffer, recorded_audio_int16, samplerate, format='WAV')  # Adjust sample rate if necessary
             buffer.seek(0)
-            
+
             # Provide download button
             st.download_button(
                 label="Download WAV",
@@ -187,9 +188,9 @@ if st.button("Process and Download Audio"):
                 file_name="recorded_audio.wav",
                 mime="audio/wav"
             )
-            
+
             st.success("Audio processed and ready for download!")
-            
+
     except Exception as e:
         st.error(f"Error processing audio: {e}")
         logging.error(f"Error processing audio: {e}")
@@ -379,7 +380,7 @@ if audio_processor.audio_frames:
     try:
         # Concatenate all recorded audio frames
         recorded_audio = np.concatenate(audio_processor.audio_frames)
-        samplerate = 44100  # Default samplerate; adjust if necessary
+        samplerate = 44100  # Default sample rate; adjust if necessary
 
         # Normalize audio
         if np.max(np.abs(recorded_audio)) == 0:
