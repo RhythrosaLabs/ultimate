@@ -167,6 +167,9 @@ if st.button("Process and Download Audio"):
             recorded_audio = np.concatenate(audio_processor.audio_frames)
             
             # Normalize audio
+            if np.max(np.abs(recorded_audio)) == 0:
+                st.warning("Recorded audio is silent.")
+                st.stop()
             recorded_audio = recorded_audio / np.max(np.abs(recorded_audio))
             
             # Convert to 16-bit PCM
@@ -190,9 +193,6 @@ if st.button("Process and Download Audio"):
     except Exception as e:
         st.error(f"Error processing audio: {e}")
         logging.error(f"Error processing audio: {e}")
-
-# Remove Upload Audio File Section Since App is Purely for Recording
-# If you decide to keep it, ensure all try blocks are properly closed.
 
 # Effect Controls
 st.sidebar.title("🎛️ Audio Effects")
@@ -377,11 +377,15 @@ if st.sidebar.button("Randomize Effects"):
 # Apply effects
 if audio_processor.audio_frames:
     try:
-        processed_audio = np.concatenate(audio_processor.audio_frames)
+        # Concatenate all recorded audio frames
+        recorded_audio = np.concatenate(audio_processor.audio_frames)
         samplerate = 44100  # Default samplerate; adjust if necessary
 
         # Normalize audio
-        processed_audio = processed_audio / np.max(np.abs(processed_audio))
+        if np.max(np.abs(recorded_audio)) == 0:
+            st.warning("Recorded audio is silent.")
+            st.stop()
+        processed_audio = recorded_audio / np.max(np.abs(recorded_audio))
 
         # Apply Effects
         if apply_lowpass:
@@ -593,4 +597,3 @@ if audio_processor.audio_frames:
 
 else:
     st.info("📝 Please record some audio to get started.")
-
