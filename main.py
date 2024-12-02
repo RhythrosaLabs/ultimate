@@ -13,8 +13,11 @@ import logging
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 
 # Setup logging
-logging.basicConfig(filename='audio_studio.log', level=logging.ERROR,
-                    format='%(asctime)s:%(levelname)s:%(message)s')
+logging.basicConfig(
+    filename='audio_studio.log',
+    level=logging.ERROR,
+    format='%(asctime)s:%(levelname)s:%(message)s'
+)
 
 # Utility functions for filtering audio
 def process_lowpass_filter(data, cutoff, fs, order=5):
@@ -39,6 +42,8 @@ def add_reverb(data, decay_factor=0.5):
 
 def process_bitcrusher(data, bit_depth=8):
     max_amplitude = np.max(np.abs(data))
+    if max_amplitude == 0:
+        return data
     step = max_amplitude / (2**bit_depth)
     crushed_audio = np.round(data / step) * step
     return crushed_audio
@@ -168,13 +173,14 @@ if st.button("Process and Download Audio"):
             samplerate = 44100  # Default sample rate; adjust if necessary
 
             # Normalize audio
-            if np.max(np.abs(recorded_audio)) == 0:
+            max_val = np.max(np.abs(recorded_audio))
+            if max_val == 0:
                 st.warning("Recorded audio is silent.")
                 st.stop()
-            recorded_audio = recorded_audio / np.max(np.abs(recorded_audio))
+            processed_audio = recorded_audio / max_val
 
             # Convert to 16-bit PCM
-            recorded_audio_int16 = (recorded_audio * 32767).astype(np.int16)
+            recorded_audio_int16 = (processed_audio * 32767).astype(np.int16)
 
             # Create a BytesIO buffer
             buffer = io.BytesIO()
@@ -383,10 +389,11 @@ if audio_processor.audio_frames:
         samplerate = 44100  # Default sample rate; adjust if necessary
 
         # Normalize audio
-        if np.max(np.abs(recorded_audio)) == 0:
+        max_val = np.max(np.abs(recorded_audio))
+        if max_val == 0:
             st.warning("Recorded audio is silent.")
             st.stop()
-        processed_audio = recorded_audio / np.max(np.abs(recorded_audio))
+        processed_audio = recorded_audio / max_val
 
         # Apply Effects
         if apply_lowpass:
