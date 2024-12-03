@@ -1,604 +1,325 @@
 import streamlit as st
-import soundfile as sf
 import numpy as np
-import io
-from scipy.signal import butter, lfilter, freqz
 import librosa
 import librosa.display
-from pydub.effects import normalize
-from pydub import AudioSegment
-import random
 import matplotlib.pyplot as plt
-import logging
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+import io
+import soundfile as sf
+import base64
+import pickle
 
-# Setup logging
-logging.basicConfig(
-    filename='audio_studio.log',
-    level=logging.ERROR,
-    format='%(asctime)s:%(levelname)s:%(message)s'
-)
-
-# Utility functions for filtering audio
-def process_lowpass_filter(data, cutoff, fs, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = lfilter(b, a, data)
-    return y, b, a
-
-def process_highpass_filter(data, cutoff, fs, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = lfilter(b, a, data)
-    return y, b, a
-
-def add_reverb(data, decay_factor=0.5):
-    reverb = np.zeros_like(data)
-    for i in range(1, len(data)):
-        reverb[i] = data[i] + decay_factor * reverb[i - 1]
-    return reverb
-
-def process_bitcrusher(data, bit_depth=8):
-    max_amplitude = np.max(np.abs(data))
-    if max_amplitude == 0:
-        return data
-    step = max_amplitude / (2**bit_depth)
-    crushed_audio = np.round(data / step) * step
-    return crushed_audio
-
-def process_chorus(data, samplerate):
-    delay_samples = int(0.02 * samplerate)  # 20ms delay
-    chorus = np.zeros_like(data)
-    for i in range(delay_samples, len(data)):
-        chorus[i] = data[i] + 0.5 * data[i - delay_samples]
-    return chorus
-
-def process_phaser(data, samplerate):
-    phase_shift = np.sin(np.linspace(0, np.pi * 2, len(data)))
-    return data * (1 + 0.5 * phase_shift)
-
-def process_overdrive(data):
-    return np.clip(data * 2, -1, 1)
-
-# Additional Effects
-def process_distortion(data, gain=1.0, threshold=0.3):
-    distorted = data * gain
-    distorted = np.where(distorted > threshold, threshold, distorted)
-    distorted = np.where(distorted < -threshold, -threshold, distorted)
-    return distorted
-
-def process_flanger(data, samplerate, delay=0.005, depth=0.002, rate=0.25):
-    delay_samples = int(delay * samplerate)
-    depth_samples = int(depth * samplerate)
-    flanger = np.zeros_like(data)
-    for i in range(delay_samples, len(data)):
-        index = i - delay_samples + depth_samples
-        if index < 0:
-            index = 0
-        elif index >= len(data):
-            index = len(data) - 1
-        flanger[i] = data[i] + 0.7 * data[index]
-    return flanger
-
-def process_equalization(data, samplerate, gain_freqs=[(250, 500), (750, 1500), (2250, 3750)], gains=[1.5, 1.0, 0.8]):
-    # Simple equalizer using band-pass filters
-    eq_audio = data.copy()
-    for (low, high), gain in zip(gain_freqs, gains):
-        b, a = butter(2, [low / (0.5 * samplerate), high / (0.5 * samplerate)], btype='band')
-        eq_audio += gain * lfilter(b, a, data)
-    eq_audio = np.clip(eq_audio, -1, 1)
-    return eq_audio
-
-# Preset effect chains
-PRESETS = {
-    "Smooth Vocals": {
-        "apply_lowpass": True, "cutoff_freq_low": 500,
-        "apply_reverb": True, "reverb_decay": 0.7,
-    },
-    "Lo-Fi Beat": {
-        "apply_bitcrusher": True, "bit_depth": 6,
-        "apply_chorus_effect": True,
-    },
-    "Psychedelic": {
-        "apply_phaser_effect": True,
-        "apply_echo": True, "echo_delay": 800, "echo_decay": 0.6,
-    },
-    "Distorted Rock": {
-        "apply_distortion_flag": True, "distortion_gain": 2.0, "distortion_threshold": 0.3,
-        "apply_flanger_flag": True, "flanger_delay": 0.005, "flanger_depth": 0.002, "flanger_rate": 0.25,
-    },
-    "Equalized Pop": {
-        "apply_equalization_flag": True, "eq_gain_freqs": [(300, 600), (1000, 2000), (3000, 6000)], "eq_gains": [1.5, 1.0, 0.8],
-    }
-}
-
-# Define the AudioProcessor callback
-class AudioProcessor:
-    def __init__(self):
-        self.audio_frames = []
-    
-    def recv(self, frame):
-        audio = frame.to_ndarray().mean(axis=1)  # Convert to mono
-        self.audio_frames.append(audio)
-        return frame
-
-# Define WebRTC client settings
-WEBRTC_CLIENT_SETTINGS = ClientSettings(
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    },
-    media_stream_constraints={"audio": True, "video": False},
-)
-
-# App configuration
+# Page configuration
 st.set_page_config(
-    page_title="Superpowered Audio Studio",
-    page_icon="\U0001F3A7",
-    layout="wide"
+    page_title="Advanced Audio Recorder",
+    page_icon="🎶",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.title("\U0001F3A7 Superpowered Audio Studio")
-st.markdown("Record, enhance, and apply effects to your audio with ease!")
+# Hide default Streamlit style
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# Live Preview Toggle
-live_preview = st.checkbox("Enable Live Preview", value=False)
-
-# Audio recording section using streamlit-webrtc
-st.header("🎤 Record Your Audio")
-
-# Initialize the audio processor
-audio_processor = AudioProcessor()
-
-# Start the WebRTC streamer
-webrtc_ctx = webrtc_streamer(
-    key="audio-recorder",
-    mode=WebRtcMode.RECVONLY,
-    client_settings=WEBRTC_CLIENT_SETTINGS,
-    audio_receiver_size=256,
-    async_processing=True,
-    on_audio_frame=audio_processor.recv,
+# Title and description
+st.title("🎶 Advanced Audio Recorder with Effect Stacking")
+st.markdown(
+    """
+    Record, play, and enhance your audio with multiple effects applied simultaneously.
+    """
 )
 
-st.write("Press the microphone button to start recording. Once done, click the button below to process and download your audio.")
+# Initialize session state
+if 'recordings' not in st.session_state:
+    st.session_state.recordings = []
 
-if st.button("Process and Download Audio"):
-    try:
-        if not audio_processor.audio_frames:
-            st.warning("No audio recorded yet. Please record some audio first.")
+if 'saved_session' not in st.session_state:
+    st.session_state.saved_session = None
+
+# Record audio
+st.header("1️⃣ Record Audio")
+audio_file = st.audio_input("Press the button to start recording:")
+
+if audio_file:
+    # Read audio data
+    audio_bytes = audio_file.read()
+    audio_data, sr_rate = librosa.load(io.BytesIO(audio_bytes), sr=None)
+
+    # Save recording in session state
+    recording_name = f"Recording {len(st.session_state.recordings) + 1}"
+    st.session_state.recordings.append({
+        'audio_bytes': audio_bytes,
+        'audio_data': audio_data,
+        'sr_rate': sr_rate,
+        'name': recording_name
+    })
+    st.success(f"{recording_name} saved!")
+
+# Recording Management
+if st.session_state.recordings:
+    st.header("2️⃣ Manage Recordings")
+    recording_names = [rec['name'] for rec in st.session_state.recordings]
+    selected_recording = st.selectbox("Select a recording to work with:", recording_names)
+    rec_index = recording_names.index(selected_recording)
+    audio_data = st.session_state.recordings[rec_index]['audio_data']
+    sr_rate = st.session_state.recordings[rec_index]['sr_rate']
+    audio_bytes = st.session_state.recordings[rec_index]['audio_bytes']
+
+    # Sidebar for audio effects
+    st.sidebar.header("🎚️ Audio Effects")
+
+    # Effect selection
+    st.sidebar.subheader("Select Effects to Apply")
+    effects = {
+        "Reverb": st.sidebar.checkbox("Reverb"),
+        "Echo": st.sidebar.checkbox("Echo"),
+        "Pitch Shift": st.sidebar.checkbox("Pitch Shift"),
+        "Speed Change": st.sidebar.checkbox("Speed Change"),
+        "Equalization": st.sidebar.checkbox("Equalization"),
+        "Chorus": st.sidebar.checkbox("Chorus"),
+        "Flanger": st.sidebar.checkbox("Flanger"),
+        "Distortion": st.sidebar.checkbox("Distortion"),
+        "Compression": st.sidebar.checkbox("Compression"),
+        "Phaser": st.sidebar.checkbox("Phaser"),
+        "Wah-Wah": st.sidebar.checkbox("Wah-Wah"),
+    }
+
+    # Effect parameters
+    st.sidebar.subheader("Adjust Effect Parameters")
+    params = {}
+
+    if effects["Reverb"]:
+        params["reverb_amount"] = st.sidebar.slider("Reverb Amount", 0.0, 1.0, 0.5,
+                                                    help="Controls the intensity of the reverb effect.")
+
+    if effects["Echo"]:
+        params["echo_delay"] = st.sidebar.slider("Echo Delay (ms)", 100, 1000, 500,
+                                                 help="Delay time for the echo effect.")
+        params["echo_decay"] = st.sidebar.slider("Echo Decay", 0.0, 1.0, 0.5,
+                                                 help="Decay rate of the echo effect.")
+
+    if effects["Pitch Shift"]:
+        params["pitch_steps"] = st.sidebar.slider("Pitch Shift (semitones)", -12, 12, 0,
+                                                  help="Number of semitones to shift the pitch.")
+
+    if effects["Speed Change"]:
+        params["speed_rate"] = st.sidebar.slider("Speed Rate", 0.5, 2.0, 1.0,
+                                                 help="Factor by which to speed up (>1) or slow down (<1) the audio.")
+
+    if effects["Equalization"]:
+        params["eq_low_gain"] = st.sidebar.slider("Low Frequency Gain (dB)", -12, 12, 0,
+                                                  help="Gain adjustment for low frequencies.")
+        params["eq_mid_gain"] = st.sidebar.slider("Mid Frequency Gain (dB)", -12, 12, 0,
+                                                  help="Gain adjustment for mid frequencies.")
+        params["eq_high_gain"] = st.sidebar.slider("High Frequency Gain (dB)", -12, 12, 0,
+                                                   help="Gain adjustment for high frequencies.")
+
+    if effects["Chorus"]:
+        params["chorus_depth"] = st.sidebar.slider("Chorus Depth", 0.0, 1.0, 0.5,
+                                                   help="Controls the depth of the chorus effect.")
+        params["chorus_rate"] = st.sidebar.slider("Chorus Rate (Hz)", 0.1, 5.0, 1.5,
+                                                  help="Controls the rate of the chorus modulation.")
+
+    if effects["Flanger"]:
+        params["flanger_depth"] = st.sidebar.slider("Flanger Depth", 0.0, 1.0, 0.5,
+                                                    help="Controls the depth of the flanger effect.")
+        params["flanger_rate"] = st.sidebar.slider("Flanger Rate (Hz)", 0.1, 5.0, 0.5,
+                                                   help="Controls the rate of the flanger modulation.")
+
+    if effects["Distortion"]:
+        params["distortion_gain"] = st.sidebar.slider("Distortion Gain", 1.0, 20.0, 5.0,
+                                                      help="Controls the amount of distortion.")
+
+    if effects["Compression"]:
+        params["compression_threshold"] = st.sidebar.slider("Compression Threshold (dB)", -60, 0, -20,
+                                                            help="Threshold above which compression is applied.")
+        params["compression_ratio"] = st.sidebar.slider("Compression Ratio", 1, 20, 4,
+                                                        help="Ratio of input to output above the threshold.")
+
+    if effects["Phaser"]:
+        params["phaser_rate"] = st.sidebar.slider("Phaser Rate (Hz)", 0.1, 5.0, 0.5,
+                                                  help="Controls the rate of the phaser modulation.")
+        params["phaser_depth"] = st.sidebar.slider("Phaser Depth", 0.0, 1.0, 0.5,
+                                                   help="Controls the depth of the phaser effect.")
+
+    if effects["Wah-Wah"]:
+        params["wah_rate"] = st.sidebar.slider("Wah-Wah Rate (Hz)", 0.1, 5.0, 1.5,
+                                               help="Controls the rate of the wah-wah modulation.")
+        params["wah_depth"] = st.sidebar.slider("Wah-Wah Depth", 0.0, 1.0, 0.5,
+                                                help="Controls the depth of the wah-wah effect.")
+
+    # Function definitions for effects
+
+    def apply_reverb(data, amount):
+        ir = np.zeros(int(sr_rate * 0.3))
+        ir[0] = 1.0
+        ir[int(len(ir) * 0.5):] = amount
+        return np.convolve(data, ir, mode='full')[:len(data)]
+
+    def apply_echo(data, delay_ms, decay):
+        delay_samples = int(sr_rate * (delay_ms / 1000.0))
+        echo_data = np.zeros(len(data) + delay_samples)
+        echo_data[:len(data)] = data
+        echo_data[delay_samples:] += data * decay
+        return echo_data[:len(data)]
+
+    def apply_pitch_shift(data, n_steps):
+        return librosa.effects.pitch_shift(data, sr_rate, n_steps=n_steps)
+
+    def apply_speed_change(data, rate):
+        return librosa.effects.time_stretch(data, rate)
+
+    def apply_equalization(data, low_gain, mid_gain, high_gain):
+        S = librosa.stft(data)
+        frequencies = librosa.fft_frequencies(sr=sr_rate)
+        low_freqs = frequencies < 500
+        mid_freqs = (frequencies >= 500) & (frequencies <= 2000)
+        high_freqs = frequencies > 2000
+        S[low_freqs, :] *= 10 ** (low_gain / 20)
+        S[mid_freqs, :] *= 10 ** (mid_gain / 20)
+        S[high_freqs, :] *= 10 ** (high_gain / 20)
+        return librosa.istft(S)
+
+    def apply_chorus(data, rate, depth):
+        t = np.arange(len(data)) / sr_rate
+        mod = depth * np.sin(2 * np.pi * rate * t)
+        chorus_data = np.interp(t + mod, t, data, left=0, right=0)
+        return data + chorus_data
+
+    def apply_flanger(data, rate, depth):
+        t = np.arange(len(data)) / sr_rate
+        delay = depth * np.sin(2 * np.pi * rate * t)
+        delay_samples = (delay * sr_rate).astype(int)
+        flanged = np.copy(data)
+        for i in range(len(data)):
+            if i - delay_samples[i] >= 0:
+                flanged[i] += data[i - delay_samples[i]]
+        return flanged / 2
+
+    def apply_distortion(data, gain):
+        return np.tanh(gain * data)
+
+    def apply_compression(data, threshold_db, ratio):
+        threshold = 10 ** (threshold_db / 20)
+        compressed = np.copy(data)
+        over_threshold = np.abs(data) > threshold
+        compressed[over_threshold] = np.sign(data[over_threshold]) * (
+            threshold + (np.abs(data[over_threshold]) - threshold) / ratio)
+        return compressed
+
+    def apply_phaser(data, rate, depth):
+        t = np.arange(len(data)) / sr_rate
+        phase = depth * np.sin(2 * np.pi * rate * t)
+        phaser_data = np.copy(data)
+        for i in range(1, len(data)):
+            phaser_data[i] += phase[i] * data[i - 1]
+        return phaser_data
+
+    def apply_wahwah(data, rate, depth):
+        t = np.arange(len(data)) / sr_rate
+        wah = depth * np.sin(2 * np.pi * rate * t)
+        wah_data = data * (1 + wah)
+        return wah_data
+
+    # Apply selected effects
+    def apply_effects(data):
+        modified = data.copy()
+        if effects["Reverb"]:
+            modified = apply_reverb(modified, params["reverb_amount"])
+        if effects["Echo"]:
+            modified = apply_echo(modified, params["echo_delay"], params["echo_decay"])
+        if effects["Pitch Shift"]:
+            modified = apply_pitch_shift(modified, params["pitch_steps"])
+        if effects["Speed Change"]:
+            modified = apply_speed_change(modified, params["speed_rate"])
+        if effects["Equalization"]:
+            modified = apply_equalization(modified, params["eq_low_gain"],
+                                          params["eq_mid_gain"], params["eq_high_gain"])
+        if effects["Chorus"]:
+            modified = apply_chorus(modified, params["chorus_rate"], params["chorus_depth"])
+        if effects["Flanger"]:
+            modified = apply_flanger(modified, params["flanger_rate"], params["flanger_depth"])
+        if effects["Distortion"]:
+            modified = apply_distortion(modified, params["distortion_gain"])
+        if effects["Compression"]:
+            modified = apply_compression(modified, params["compression_threshold"],
+                                         params["compression_ratio"])
+        if effects["Phaser"]:
+            modified = apply_phaser(modified, params["phaser_rate"], params["phaser_depth"])
+        if effects["Wah-Wah"]:
+            modified = apply_wahwah(modified, params["wah_rate"], params["wah_depth"])
+        # Normalize to prevent clipping
+        max_abs = np.max(np.abs(modified))
+        if max_abs > 1.0:
+            modified = modified / max_abs
+        return modified
+
+    with st.spinner("Applying effects..."):
+        modified_data = apply_effects(audio_data)
+
+    # Save modified audio to buffer
+    modified_audio = io.BytesIO()
+    sf.write(modified_audio, modified_data, sr_rate, format='wav')
+    modified_audio_bytes = modified_audio.getvalue()
+
+    # Playback and visualization
+    st.header("3️⃣ Playback & Visualization")
+    tabs = st.tabs(["Original", "Modified"])
+
+    with tabs[0]:
+        st.subheader("🔊 Original Audio")
+        st.audio(audio_bytes, format='audio/wav')
+        fig_original, ax_original = plt.subplots()
+        librosa.display.waveshow(audio_data, sr=sr_rate, ax=ax_original)
+        ax_original.set_xlabel("Time (s)")
+        ax_original.set_ylabel("Amplitude")
+        st.pyplot(fig_original)
+
+    with tabs[1]:
+        st.subheader("🎧 Modified Audio")
+        st.audio(modified_audio_bytes, format='audio/wav')
+        fig_modified, ax_modified = plt.subplots()
+        librosa.display.waveshow(modified_data, sr=sr_rate, ax=ax_modified)
+        ax_modified.set_xlabel("Time (s)")
+        ax_modified.set_ylabel("Amplitude")
+        st.pyplot(fig_modified)
+
+    # Session saving/loading
+    st.header("4️⃣ Session Management")
+    session_name = st.text_input("Session Name", value="My Session")
+    if st.button("💾 Save Session"):
+        session_data = {
+            'recordings': st.session_state.recordings,
+            'effects': effects,
+            'params': params,
+            'selected_recording': selected_recording
+        }
+        st.session_state.saved_session = session_data
+        st.success("Session saved successfully!")
+
+    if st.button("📂 Load Session"):
+        if st.session_state.saved_session:
+            session_data = st.session_state.saved_session
+            st.session_state.recordings = session_data['recordings']
+            effects = session_data['effects']
+            params = session_data['params']
+            selected_recording = session_data['selected_recording']
+            st.success("Session loaded successfully!")
         else:
-            # Concatenate all recorded audio frames
-            recorded_audio = np.concatenate(audio_processor.audio_frames)
-            samplerate = 44100  # Default sample rate; adjust if necessary
+            st.error("No saved session found.")
 
-            # Normalize audio
-            max_val = np.max(np.abs(recorded_audio))
-            if max_val == 0:
-                st.warning("Recorded audio is silent.")
-                st.stop()
-            processed_audio = recorded_audio / max_val
+    # Download option
+    st.header("5️⃣ Download")
+    st.download_button(
+        label="💾 Download Modified Audio",
+        data=modified_audio_bytes,
+        file_name=f"{selected_recording}_modified.wav",
+        mime="audio/wav"
+    )
 
-            # Convert to 16-bit PCM
-            recorded_audio_int16 = (processed_audio * 32767).astype(np.int16)
-
-            # Create a BytesIO buffer
-            buffer = io.BytesIO()
-            sf.write(buffer, recorded_audio_int16, samplerate, format='WAV')  # Adjust sample rate if necessary
-            buffer.seek(0)
-
-            # Provide download button
-            st.download_button(
-                label="Download WAV",
-                data=buffer,
-                file_name="recorded_audio.wav",
-                mime="audio/wav"
-            )
-
-            st.success("Audio processed and ready for download!")
-
-    except Exception as e:
-        st.error(f"Error processing audio: {e}")
-        logging.error(f"Error processing audio: {e}")
-
-# Effect Controls
-st.sidebar.title("🎛️ Audio Effects")
-
-# Tooltips for effects
-st.sidebar.markdown("""
-**Effect Descriptions:**
-- **Lowpass Filter:** Allows frequencies below the cutoff to pass and attenuates higher frequencies.
-- **Highpass Filter:** Allows frequencies above the cutoff to pass and attenuates lower frequencies.
-- **Reverb:** Adds a sense of space by simulating reverberations.
-- **Bitcrusher:** Reduces the audio resolution, creating a lo-fi effect.
-- **Chorus:** Creates a richer sound by mixing delayed copies of the signal.
-- **Phaser:** Creates a sweeping effect by altering the phase of the signal.
-- **Overdrive:** Simulates the warm distortion of analog equipment.
-- **Distortion:** Adds heavy clipping for aggressive sound.
-- **Flanger:** Creates a swirling effect by mixing the signal with a delayed copy.
-- **Equalization:** Adjusts the balance of specific frequency bands.
-- **Echo:** Adds repeated delayed copies of the signal.
-- **Amplify Volume:** Increases or decreases the audio volume.
-- **Reverse Audio:** Reverses the audio playback direction.
-""")
-
-# Presets
-preset_choice = st.sidebar.selectbox("Choose an Effect Preset", ["None"] + list(PRESETS.keys()))
-if preset_choice != "None":
-    preset_settings = PRESETS[preset_choice]
-    # Initialize all possible effect variables to False or default
-    apply_lowpass = False
-    apply_highpass = False
-    apply_reverb = False
-    reverb_decay = 0.5
-    apply_bitcrusher = False
-    bit_depth = 8
-    reverse_audio = False
-    apply_amplify = False
-    amplification_factor = 1.0
-    apply_echo = False
-    echo_delay = 500
-    echo_decay = 0.5
-    apply_chorus_effect = False
-    apply_phaser_effect = False
-    apply_overdrive_effect = False
-    apply_distortion_flag = False
-    distortion_gain = 1.0
-    distortion_threshold = 0.3
-    apply_flanger_flag = False
-    flanger_delay = 0.005
-    flanger_depth = 0.002
-    flanger_rate = 0.25
-    apply_equalization_flag = False
-    eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
-    eq_gains = [1.5, 1.0, 0.8]
-
-    # Update settings based on preset
-    for key, value in preset_settings.items():
-        locals()[key] = value
 else:
-    # Manual Effect Controls
-    apply_lowpass = st.sidebar.checkbox("Apply Lowpass Filter")
-    if apply_lowpass:
-        cutoff_freq_low = st.sidebar.slider("Lowpass Cutoff Frequency (Hz)", 100, 22050, 1000)
-    else:
-        cutoff_freq_low = 1000
-
-    apply_highpass = st.sidebar.checkbox("Apply Highpass Filter")
-    if apply_highpass:
-        cutoff_freq_high = st.sidebar.slider("Highpass Cutoff Frequency (Hz)", 20, 22050, 500)
-    else:
-        cutoff_freq_high = 500
-
-    apply_reverb = st.sidebar.checkbox("Add Reverb")
-    if apply_reverb:
-        reverb_decay = st.sidebar.slider("Reverb Decay Factor", 0.1, 1.0, 0.5)
-    else:
-        reverb_decay = 0.5
-
-    apply_bitcrusher = st.sidebar.checkbox("Apply Bitcrusher")
-    if apply_bitcrusher:
-        bit_depth = st.sidebar.slider("Bit Depth", 4, 16, 8)
-    else:
-        bit_depth = 8
-
-    reverse_audio = st.sidebar.checkbox("Reverse Audio")
-
-    apply_amplify = st.sidebar.checkbox("Amplify Volume")
-    if apply_amplify:
-        amplification_factor = st.sidebar.slider("Amplification Factor", 0.5, 3.0, 1.0)
-    else:
-        amplification_factor = 1.0
-
-    apply_echo = st.sidebar.checkbox("Add Echo")
-    if apply_echo:
-        echo_delay = st.sidebar.slider("Echo Delay (ms)", 100, 2000, 500)
-        echo_decay = st.sidebar.slider("Echo Decay Factor", 0.1, 1.0, 0.5)
-    else:
-        echo_delay = 500
-        echo_decay = 0.5
-
-    apply_chorus_effect = st.sidebar.checkbox("Add Chorus")
-    apply_phaser_effect = st.sidebar.checkbox("Add Phaser")
-    apply_overdrive_effect = st.sidebar.checkbox("Add Overdrive")
-    apply_distortion_flag = st.sidebar.checkbox("Apply Distortion")
-    if apply_distortion_flag:
-        distortion_gain = st.sidebar.slider("Distortion Gain", 1.0, 10.0, 2.0)
-        distortion_threshold = st.sidebar.slider("Distortion Threshold", 0.1, 1.0, 0.3)
-    else:
-        distortion_gain = 1.0
-        distortion_threshold = 0.3
-
-    apply_flanger_flag = st.sidebar.checkbox("Add Flanger")
-    if apply_flanger_flag:
-        flanger_delay = st.sidebar.slider("Flanger Delay (s)", 0.001, 0.02, 0.005)
-        flanger_depth = st.sidebar.slider("Flanger Depth (s)", 0.001, 0.01, 0.002)
-        flanger_rate = st.sidebar.slider("Flanger Rate (Hz)", 0.1, 5.0, 0.25)
-    else:
-        flanger_delay = 0.005
-        flanger_depth = 0.002
-        flanger_rate = 0.25
-
-    apply_equalization_flag = st.sidebar.checkbox("Add Equalization")
-    if apply_equalization_flag:
-        eq_gain_freqs_selected = st.sidebar.multiselect("Select Frequency Bands for EQ", [300, 1000, 3000, 6000, 12000], default=[300, 1000, 3000])
-        eq_gains = []
-        for freq in eq_gain_freqs_selected:
-            gain = st.sidebar.slider(f"Gain for {freq} Hz", 0.5, 2.0, 1.0, step=0.1)
-            eq_gains.append(gain)
-        # Convert list to list of tuples for bandpass
-        eq_gain_freqs = [(freq - 100, freq + 100) for freq in eq_gain_freqs_selected]
-    else:
-        eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
-        eq_gains = [1.0, 1.0, 1.0]
-
-# Randomize effects
-st.sidebar.title("🎲 Randomize Effects")
-craziness = st.sidebar.slider("Craziness Level", 0.1, 1.0, 0.5)
-if st.sidebar.button("Randomize Effects"):
-    apply_lowpass = random.random() < craziness
-    cutoff_freq_low = random.randint(100, 22050) if apply_lowpass else 1000
-
-    apply_highpass = random.random() < craziness
-    cutoff_freq_high = random.randint(20, 22050) if apply_highpass else 500
-
-    apply_reverb = random.random() < craziness
-    reverb_decay = random.uniform(0.1, 1.0) if apply_reverb else 0.5
-
-    apply_bitcrusher = random.random() < craziness
-    bit_depth = random.randint(4, 16) if apply_bitcrusher else 8
-
-    reverse_audio = random.random() < craziness
-
-    apply_amplify = random.random() < craziness
-    amplification_factor = random.uniform(0.5, 3.0) if apply_amplify else 1.0
-
-    apply_echo = random.random() < craziness
-    echo_delay = random.randint(100, 2000) if apply_echo else 500
-    echo_decay = random.uniform(0.1, 1.0) if apply_echo else 0.5
-
-    apply_chorus_effect = random.random() < craziness
-    apply_phaser_effect = random.random() < craziness
-    apply_overdrive_effect = random.random() < craziness
-
-    apply_distortion_flag = random.random() < craziness
-    distortion_gain = random.uniform(1.0, 10.0) if apply_distortion_flag else 1.0
-    distortion_threshold = random.uniform(0.1, 1.0) if apply_distortion_flag else 0.3
-
-    apply_flanger_flag = random.random() < craziness
-    flanger_delay = random.uniform(0.001, 0.02) if apply_flanger_flag else 0.005
-    flanger_depth = random.uniform(0.001, 0.01) if apply_flanger_flag else 0.002
-    flanger_rate = random.uniform(0.1, 5.0) if apply_flanger_flag else 0.25
-
-    apply_equalization_flag = random.random() < craziness
-    if apply_equalization_flag:
-        selected_freqs = random.sample([300, 1000, 3000, 6000, 12000], random.randint(1, 3))
-        eq_gain_freqs = [(freq - 100, freq + 100) for freq in selected_freqs]
-        eq_gains = [random.uniform(0.5, 2.0) for _ in selected_freqs]
-    else:
-        eq_gain_freqs = [(300, 600), (1000, 2000), (3000, 6000)]
-        eq_gains = [1.0, 1.0, 1.0]
-
-    st.sidebar.success("Effects randomized!")
-
-# Apply effects
-if audio_processor.audio_frames:
-    try:
-        # Concatenate all recorded audio frames
-        recorded_audio = np.concatenate(audio_processor.audio_frames)
-        samplerate = 44100  # Default sample rate; adjust if necessary
-
-        # Normalize audio
-        max_val = np.max(np.abs(recorded_audio))
-        if max_val == 0:
-            st.warning("Recorded audio is silent.")
-            st.stop()
-        processed_audio = recorded_audio / max_val
-
-        # Apply Effects
-        if apply_lowpass:
-            try:
-                processed_audio, b_low, a_low = process_lowpass_filter(processed_audio, cutoff_freq_low, samplerate)
-                st.sidebar.success(f"Lowpass filter applied at {cutoff_freq_low} Hz")
-            except Exception as e:
-                st.sidebar.error(f"Error applying lowpass filter: {e}")
-                logging.error(f"Error applying lowpass filter: {e}")
-
-        if apply_highpass:
-            try:
-                processed_audio, b_high, a_high = process_highpass_filter(processed_audio, cutoff_freq_high, samplerate)
-                st.sidebar.success(f"Highpass filter applied at {cutoff_freq_high} Hz")
-            except Exception as e:
-                st.sidebar.error(f"Error applying highpass filter: {e}")
-                logging.error(f"Error applying highpass filter: {e}")
-
-        if apply_reverb:
-            try:
-                processed_audio = add_reverb(processed_audio, reverb_decay)
-                st.sidebar.success(f"Reverb added with decay factor {reverb_decay}")
-            except Exception as e:
-                st.sidebar.error(f"Error adding reverb: {e}")
-                logging.error(f"Error adding reverb: {e}")
-
-        if apply_bitcrusher:
-            try:
-                processed_audio = process_bitcrusher(processed_audio, bit_depth)
-                st.sidebar.success(f"Bitcrusher applied with bit depth {bit_depth}")
-            except Exception as e:
-                st.sidebar.error(f"Error applying bitcrusher: {e}")
-                logging.error(f"Error applying bitcrusher: {e}")
-
-        if reverse_audio:
-            try:
-                processed_audio = processed_audio[::-1]
-                st.sidebar.success("Audio reversed")
-            except Exception as e:
-                st.sidebar.error(f"Error reversing audio: {e}")
-                logging.error(f"Error reversing audio: {e}")
-
-        if apply_amplify:
-            try:
-                processed_audio = processed_audio * amplification_factor
-                processed_audio = np.clip(processed_audio, -1.0, 1.0)
-                st.sidebar.success(f"Volume amplified by a factor of {amplification_factor}")
-            except Exception as e:
-                st.sidebar.error(f"Error amplifying volume: {e}")
-                logging.error(f"Error amplifying volume: {e}")
-
-        if apply_echo:
-            try:
-                delay_samples = int((echo_delay / 1000) * samplerate)
-                echo = np.zeros_like(processed_audio)
-                for i in range(delay_samples, len(processed_audio)):
-                    echo[i] = processed_audio[i] + echo_decay * processed_audio[i - delay_samples]
-                processed_audio = echo
-                st.sidebar.success(f"Echo added with delay {echo_delay} ms and decay factor {echo_decay}")
-            except Exception as e:
-                st.sidebar.error(f"Error adding echo: {e}")
-                logging.error(f"Error adding echo: {e}")
-
-        if apply_chorus_effect:
-            try:
-                processed_audio = process_chorus(processed_audio, samplerate)
-                st.sidebar.success("Chorus effect applied")
-            except Exception as e:
-                st.sidebar.error(f"Error applying chorus effect: {e}")
-                logging.error(f"Error applying chorus effect: {e}")
-
-        if apply_phaser_effect:
-            try:
-                processed_audio = process_phaser(processed_audio, samplerate)
-                st.sidebar.success("Phaser effect applied")
-            except Exception as e:
-                st.sidebar.error(f"Error applying phaser effect: {e}")
-                logging.error(f"Error applying phaser effect: {e}")
-
-        if apply_overdrive_effect:
-            try:
-                processed_audio = process_overdrive(processed_audio)
-                st.sidebar.success("Overdrive effect applied")
-            except Exception as e:
-                st.sidebar.error(f"Error applying overdrive effect: {e}")
-                logging.error(f"Error applying overdrive effect: {e}")
-
-        if apply_distortion_flag:
-            try:
-                processed_audio = process_distortion(processed_audio, gain=distortion_gain, threshold=distortion_threshold)
-                st.sidebar.success(f"Distortion applied with gain {distortion_gain:.2f} and threshold {distortion_threshold:.2f}")
-            except Exception as e:
-                st.sidebar.error(f"Error applying distortion: {e}")
-                logging.error(f"Error applying distortion: {e}")
-
-        if apply_flanger_flag:
-            try:
-                processed_audio = process_flanger(processed_audio, samplerate, delay=flanger_delay, depth=flanger_depth, rate=flanger_rate)
-                st.sidebar.success(f"Flanger applied with delay {flanger_delay:.3f}s, depth {flanger_depth:.3f}s, and rate {flanger_rate:.2f}Hz")
-            except Exception as e:
-                st.sidebar.error(f"Error applying flanger: {e}")
-                logging.error(f"Error applying flanger: {e}")
-
-        if apply_equalization_flag:
-            try:
-                processed_audio = process_equalization(processed_audio, samplerate, gain_freqs=eq_gain_freqs, gains=eq_gains)
-                st.sidebar.success(f"Equalization applied on frequency bands {eq_gain_freqs} Hz with gains {eq_gains}")
-            except Exception as e:
-                st.sidebar.error(f"Error applying equalization: {e}")
-                logging.error(f"Error applying equalization: {e}")
-
-        # Normalize the processed audio to prevent clipping
-        try:
-            audio_segment = AudioSegment(
-                (processed_audio * 32767).astype(np.int16).tobytes(),
-                frame_rate=samplerate,
-                sample_width=2,  # 16 bits
-                channels=1
-            )
-            normalized_audio = normalize(audio_segment)
-            processed_audio = np.array(normalized_audio.get_array_of_samples()).astype(np.float32) / 32767.0
-        except Exception as e:
-            st.sidebar.error(f"Error normalizing audio: {e}")
-            logging.error(f"Error normalizing audio: {e}")
-
-        # Convert processed audio to bytes for playback and download
-        try:
-            buffer = io.BytesIO()
-            sf.write(buffer, processed_audio, samplerate, format='WAV')
-            buffer.seek(0)
-        except Exception as e:
-            st.error(f"Error preparing audio for playback/download: {e}")
-            logging.error(f"Error preparing audio for playback/download: {e}")
-            st.stop()
-
-        # Live Preview
-        if live_preview:
-            st.subheader("🎧 Live Preview - Processed Audio")
-            st.audio(buffer, format='audio/wav')
-            buffer.seek(0)  # Reset buffer position after playback
-
-        # Download processed audio
-        st.subheader("💾 Download Processed Audio")
-        st.download_button(
-            label="Download WAV",
-            data=buffer,
-            file_name="processed_audio.wav",
-            mime="audio/wav"
-        )
-
-        # Enhanced Visualization
-        st.subheader("📊 Enhanced Visualization")
-
-        # Waveform and Spectrogram Comparison
-        try:
-            fig, ax = plt.subplots(2, 2, figsize=(15, 10))
-
-            # Original Waveform
-            ax[0, 0].plot(recorded_audio, color='blue')
-            ax[0, 0].set_title("Original Audio Waveform")
-            ax[0, 0].set_xlabel("Samples")
-            ax[0, 0].set_ylabel("Amplitude")
-
-            # Processed Waveform
-            ax[0, 1].plot(processed_audio, color='orange')
-            ax[0, 1].set_title("Processed Audio Waveform")
-            ax[0, 1].set_xlabel("Samples")
-            ax[0, 1].set_ylabel("Amplitude")
-
-            # Original Spectrogram
-            S_orig = librosa.stft(recorded_audio)
-            S_db_orig = librosa.amplitude_to_db(np.abs(S_orig), ref=np.max)
-            img_orig = librosa.display.specshow(S_db_orig, sr=samplerate, x_axis='time', y_axis='log', ax=ax[1, 0])
-            ax[1, 0].set_title("Original Audio Spectrogram")
-            fig.colorbar(img_orig, ax=ax[1, 0], format="%+2.f dB")
-
-            # Processed Spectrogram
-            S_proc = librosa.stft(processed_audio)
-            S_db_proc = librosa.amplitude_to_db(np.abs(S_proc), ref=np.max)
-            img_proc = librosa.display.specshow(S_db_proc, sr=samplerate, x_axis='time', y_axis='log', ax=ax[1, 1])
-            ax[1, 1].set_title("Processed Audio Spectrogram")
-            fig.colorbar(img_proc, ax=ax[1, 1], format="%+2.f dB")
-
-            plt.tight_layout()
-            st.pyplot(fig)
-        except Exception as e:
-            st.error(f"Error generating spectrogram visualization: {e}")
-            logging.error(f"Error generating spectrogram visualization: {e}")
-
-        # Frequency Response Plot for Filters
-        if apply_lowpass or apply_highpass:
-            try:
-                fig2, ax2 = plt.subplots(figsize=(10, 5))
-                if apply_lowpass:
-                    w_low, h_low = freqz(b_low, a_low, worN=8000)
-                    ax2.plot(0.5 * samplerate * w_low / np.pi, np.abs(h_low), label=f'Lowpass ({cutoff_freq_low} Hz)')
-                if apply_highpass:
-                    w_high, h_high = freqz(b_high, a_high, worN=8000)
-                    ax2.plot(0.5 * samplerate * w_high / np.pi, np.abs(h_high), label=f'Highpass ({cutoff_freq_high} Hz)')
-                ax2.set_title("Frequency Response")
-                ax2.set_xlabel("Frequency (Hz)")
-                ax2.set_ylabel("Gain")
-                ax2.legend()
-                ax2.grid()
-                st.pyplot(fig2)
-            except Exception as e:
-                st.error(f"Error generating frequency response plot: {e}")
-                logging.error(f"Error generating frequency response plot: {e}")
+    st.info("Please record your audio to access all features.")
