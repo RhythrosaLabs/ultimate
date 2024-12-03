@@ -6,10 +6,11 @@ import librosa.display
 import matplotlib.pyplot as plt
 import io
 import soundfile as sf
+import noisereduce as nr  # AI-based noise reduction library
 
 # Page configuration
 st.set_page_config(
-    page_title="Advanced Audio Recorder",
+    page_title="Advanced Audio Recorder with AI",
     page_icon="🎶",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -25,10 +26,10 @@ hide_st_style = """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
 # Title and description
-st.title("🎶 Advanced Audio Recorder with Effect Stacking")
+st.title("🎶 Advanced Audio Recorder with AI-Powered Noise Reduction")
 st.markdown(
     """
-    Record, play, and enhance your audio with multiple effects applied simultaneously.
+    Record, play, and enhance your audio with AI-powered effects applied simultaneously.
     """
 )
 
@@ -79,6 +80,7 @@ st.sidebar.header("🎚️ Audio Effects")
 # Effect selection
 st.sidebar.subheader("Select Effects to Apply")
 effects = {
+    "Noise Reduction (AI-based)": st.sidebar.checkbox("Noise Reduction (AI-based)"),
     "Reverb": st.sidebar.checkbox("Reverb"),
     "Echo": st.sidebar.checkbox("Echo"),
     "Pitch Shift": st.sidebar.checkbox("Pitch Shift"),
@@ -95,6 +97,10 @@ effects = {
 # Effect parameters
 st.sidebar.subheader("Adjust Effect Parameters")
 params = {}
+
+if effects["Noise Reduction (AI-based)"]:
+    params["noise_reduction_prop_decrease"] = st.sidebar.slider("Noise Reduction Amount", 0.0, 1.0, 0.5,
+                                                                help="Controls the amount of noise reduction.")
 
 if effects["Reverb"]:
     params["reverb_amount"] = st.sidebar.slider("Reverb Amount", 0.0, 1.0, 0.5,
@@ -180,6 +186,11 @@ with tabs[1]:
     if audio_bytes:
         # Define effect functions (include all effect functions here)
 
+        def apply_noise_reduction(data, prop_decrease):
+            # Apply AI-based noise reduction
+            reduced_noise = nr.reduce_noise(y=data, sr=sr_rate, prop_decrease=prop_decrease)
+            return reduced_noise
+
         def apply_reverb(data, amount):
             ir = np.zeros(int(sr_rate * 0.3))
             ir[0] = 1.0
@@ -254,6 +265,8 @@ with tabs[1]:
         # Apply selected effects
         def apply_effects(data):
             modified = data.copy()
+            if effects["Noise Reduction (AI-based)"]:
+                modified = apply_noise_reduction(modified, params["noise_reduction_prop_decrease"])
             if effects["Reverb"]:
                 modified = apply_reverb(modified, params["reverb_amount"])
             if effects["Echo"]:
