@@ -6,7 +6,6 @@ import librosa.display
 import matplotlib.pyplot as plt
 import io
 import soundfile as sf
-from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
 
 # Page configuration
 st.set_page_config(
@@ -40,50 +39,24 @@ if 'recordings' not in st.session_state:
 if 'saved_session' not in st.session_state:
     st.session_state.saved_session = None
 
-# Audio Processor for webrtc_streamer
-class AudioProcessor(AudioProcessorBase):
-    def __init__(self):
-        self.frames = []
-
-    def recv_audio(self, frame):
-        self.frames.append(frame.to_ndarray().flatten())
-        return frame
-
 # Record audio
 st.header("1️⃣ Record Audio")
-webrtc_ctx = webrtc_streamer(
-    key="audio",
-    mode=WebRtcMode.SENDONLY,
-    audio_receiver_size=1024,
-    media_stream_constraints={
-        "audio": True,
-        "video": False,
-    },
-    async_processing=True,
-)
+audio_file = st.audio_input("Press the button to start recording:")
 
-if webrtc_ctx.state.playing:
-    if st.button("Stop Recording"):
-        webrtc_ctx.stop()
-        if webrtc_ctx.audio_receiver:
-            audio_frames = []
-            while True:
-                try:
-                    frame = webrtc_ctx.audio_receiver.get_frames(timeout=1)
-                    audio_frames.extend([f.to_ndarray().flatten() for f in frame])
-                except:
-                    break
-            audio_data = np.concatenate(audio_frames)
-            sr_rate = 48000  # Default sample rate for WebRTC audio
-            recording_name = f"Recording {len(st.session_state.recordings) + 1}"
-            st.session_state.recordings.append({
-                'audio_data': audio_data,
-                'sr_rate': sr_rate,
-                'name': recording_name
-            })
-            st.success(f"{recording_name} saved!")
-else:
-    st.info("Click on 'Start' to begin recording.")
+if audio_file:
+    # Read audio data
+    audio_bytes = audio_file.read()
+    audio_data, sr_rate = librosa.load(io.BytesIO(audio_bytes), sr=None)
+
+    # Save recording in session state
+    recording_name = f"Recording {len(st.session_state.recordings) + 1}"
+    st.session_state.recordings.append({
+        'audio_bytes': audio_bytes,
+        'audio_data': audio_data,
+        'sr_rate': sr_rate,
+        'name': recording_name
+    })
+    st.success(f"{recording_name} saved!")
 
 # Recording Management
 st.header("2️⃣ Manage Recordings")
@@ -93,10 +66,12 @@ if st.session_state.recordings:
     rec_index = recording_names.index(selected_recording)
     audio_data = st.session_state.recordings[rec_index]['audio_data']
     sr_rate = st.session_state.recordings[rec_index]['sr_rate']
+    audio_bytes = st.session_state.recordings[rec_index]['audio_bytes']
 else:
     st.info("No recordings available. Please record audio to use this feature.")
     audio_data = None
     sr_rate = None
+    audio_bytes = None
 
 # Sidebar for audio effects
 st.sidebar.header("🎚️ Audio Effects")
@@ -190,12 +165,8 @@ tabs = st.tabs(["Original", "Modified"])
 
 with tabs[0]:
     st.subheader("🔊 Original Audio")
-    if audio_data is not None:
-        # Display audio player
-        audio_buffer = io.BytesIO()
-        sf.write(audio_buffer, audio_data, sr_rate, format='wav')
-        st.audio(audio_buffer.getvalue(), format='audio/wav')
-        # Plot waveform
+    if audio_bytes:
+        st.audio(audio_bytes, format='audio/wav')
         fig_original, ax_original = plt.subplots()
         librosa.display.waveshow(audio_data, sr=sr_rate, ax=ax_original)
         ax_original.set_xlabel("Time (s)")
@@ -206,16 +177,21 @@ with tabs[0]:
 
 with tabs[1]:
     st.subheader("🎧 Modified Audio")
-    if audio_data is not None:
-        # Define effect functions
+    if audio_bytes:
+        # Define effect functions (include all effect functions here)
+
         def apply_reverb(data, amount):
-            return librosa.effects.preemphasis(data, coef=amount)
+            ir = np.zeros(int(sr_rate * 0.3))
+            ir[0] = 1.0
+            ir[int(len(ir) * 0.5):] = amount
+            return np.convolve(data, ir, mode='full')[:len(data)]
 
         def apply_echo(data, delay_ms, decay):
             delay_samples = int(sr_rate * (delay_ms / 1000.0))
-            echo_data = np.pad(data, (delay_samples, 0), 'constant', constant_values=(0, 0))
-            echo_data = echo_data[:len(data)] + decay * data
-            return echo_data
+            echo_data = np.zeros(len(data) + delay_samples)
+            echo_data[:len(data)] = data
+            echo_data[delay_samples:] += data * decay
+            return echo_data[:len(data)]
 
         def apply_pitch_shift(data, n_steps):
             return librosa.effects.pitch_shift(data, sr_rate, n_steps=n_steps)
@@ -226,29 +202,28 @@ with tabs[1]:
         def apply_equalization(data, low_gain, mid_gain, high_gain):
             S = librosa.stft(data)
             frequencies = librosa.fft_frequencies(sr=sr_rate)
-            gain = np.ones_like(frequencies)
-            gain[frequencies < 500] *= 10 ** (low_gain / 20)
-            gain[(frequencies >= 500) & (frequencies <= 2000)] *= 10 ** (mid_gain / 20)
-            gain[frequencies > 2000] *= 10 ** (high_gain / 20)
-            S_equalized = S * gain[:, np.newaxis]
-            return librosa.istft(S_equalized)
+            low_freqs = frequencies < 500
+            mid_freqs = (frequencies >= 500) & (frequencies <= 2000)
+            high_freqs = frequencies > 2000
+            S[low_freqs, :] *= 10 ** (low_gain / 20)
+            S[mid_freqs, :] *= 10 ** (mid_gain / 20)
+            S[high_freqs, :] *= 10 ** (high_gain / 20)
+            return librosa.istft(S)
 
         def apply_chorus(data, rate, depth):
             t = np.arange(len(data)) / sr_rate
             mod = depth * np.sin(2 * np.pi * rate * t)
-            chorus_data = np.interp(t + mod, t, data)
+            chorus_data = np.interp(t + mod, t, data, left=0, right=0)
             return data + chorus_data
 
         def apply_flanger(data, rate, depth):
             t = np.arange(len(data)) / sr_rate
             delay = depth * np.sin(2 * np.pi * rate * t)
-            flanged = np.zeros_like(data)
+            delay_samples = (delay * sr_rate).astype(int)
+            flanged = np.copy(data)
             for i in range(len(data)):
-                delay_samples = int(delay[i] * sr_rate)
-                if i - delay_samples >= 0:
-                    flanged[i] = data[i] + data[i - delay_samples]
-                else:
-                    flanged[i] = data[i]
+                if i - delay_samples[i] >= 0:
+                    flanged[i] += data[i - delay_samples[i]]
             return flanged / 2
 
         def apply_distortion(data, gain):
@@ -265,7 +240,9 @@ with tabs[1]:
         def apply_phaser(data, rate, depth):
             t = np.arange(len(data)) / sr_rate
             phase = depth * np.sin(2 * np.pi * rate * t)
-            phaser_data = data + np.roll(data, int(sr_rate * phase.mean()))
+            phaser_data = np.copy(data)
+            for i in range(1, len(data)):
+                phaser_data[i] += phase[i] * data[i - 1]
             return phaser_data
 
         def apply_wahwah(data, rate, depth):
@@ -308,11 +285,7 @@ with tabs[1]:
             return modified
 
         with st.spinner("Applying effects..."):
-            try:
-                modified_data = apply_effects(audio_data)
-            except Exception as e:
-                st.error(f"Error applying effects: {e}")
-                modified_data = audio_data
+            modified_data = apply_effects(audio_data)
 
         # Save modified audio to buffer
         modified_audio = io.BytesIO()
@@ -357,7 +330,7 @@ if st.button("📂 Load Session"):
 
 # Download option
 st.header("5️⃣ Download")
-if audio_data is not None and modified_audio_bytes:
+if audio_bytes and modified_audio_bytes:
     st.download_button(
         label="💾 Download Modified Audio",
         data=modified_audio_bytes,
