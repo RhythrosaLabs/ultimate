@@ -113,6 +113,27 @@ Welcome to the **Industrial Noise Generator Pro Max with Variations**! This app 
 # Sidebar for parameters
 st.sidebar.header("🎛️ Controls")
 
+st.sidebar.subheader("🎙️ Record Audio")
+recorded_audio = st.audio_input("Record audio to include")
+# Include recorded audio
+if recorded_audio is not None:
+    audio_bytes = recorded_audio.read()
+    # Load the recorded audio
+    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+    y = y[:total_samples]  # Ensure length matches
+    y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+    y = y.astype(np.float32)  # Ensure float type
+
+    # Adjust lengths if necessary
+    if len(y) != len(combined_data):
+        min_length = min(len(y), len(combined_data))
+        y = y[:min_length]
+        combined_data = combined_data[:min_length]
+
+    combined_data += y
+
+
+
 # Number of samples to generate
 st.sidebar.subheader("🔢 Sample Generation")
 num_samples = st.sidebar.number_input(
