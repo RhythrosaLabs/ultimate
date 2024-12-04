@@ -1,4 +1,6 @@
 import streamlit as st
+import numpy as np
+import librosa
 import random
 
 # Initialize game state
@@ -8,13 +10,26 @@ if "game_state" not in st.session_state:
     st.session_state.completed_puzzles = []
 
 # Helper functions
-def analyze_audio(audio_input):
+def analyze_audio(audio_input, target_pitch=None, target_beat=None):
     """
-    Placeholder for audio analysis logic.
-    For example, return "correct" if the player mimics a required pattern correctly.
+    Analyze the audio input for pitch or beat matching.
     """
-    # Simulate random success/failure for now
-    return random.choice(["correct", "incorrect"])
+    # Placeholder for pitch/beat analysis
+    try:
+        audio_data, sr = librosa.load(audio_input.name, sr=None)
+        pitches, magnitudes = librosa.piptrack(y=audio_data, sr=sr)
+        beat_times = librosa.beat.beat_track(y=audio_data, sr=sr)[1]
+
+        # Check if the target pitch or beat is met (simplified)
+        if target_pitch:
+            if any(np.isclose(pitches, target_pitch, atol=50)):
+                return "correct"
+        if target_beat:
+            if len(beat_times) >= target_beat:
+                return "correct"
+        return "incorrect"
+    except Exception as e:
+        return "incorrect"
 
 def progress_story():
     if st.session_state.game_state == "start":
@@ -38,9 +53,10 @@ def start_scene():
 def village_scene():
     st.title("The Village")
     st.write("You arrive at a bustling village entranced by the melody. A villager approaches and says: \"The path to the tower is sealed by a harmonic gate. Can you match the tune?\"")
+    st.audio("path_to_hint_audio/village_hint.mp3", format="audio/mp3")
     audio_input = st.audio_input("Sing the melody to unlock the gate")
     if audio_input:
-        result = analyze_audio(audio_input)
+        result = analyze_audio(audio_input, target_pitch=440)  # Example target pitch: 440Hz (A4)
         if result == "correct":
             st.success("The gate opens with a resonant chime!")
             progress_story()
@@ -50,9 +66,10 @@ def village_scene():
 def forest_scene():
     st.title("The Forest")
     st.write("The forest is alive with whispers. A glowing tree speaks: \"I will grant you a key if you mimic my rhythm.\"")
+    st.audio("path_to_hint_audio/forest_hint.mp3", format="audio/mp3")
     audio_input = st.audio_input("Clap or mimic the rhythm of the glowing tree")
     if audio_input:
-        result = analyze_audio(audio_input)
+        result = analyze_audio(audio_input, target_beat=3)  # Example target beat count
         if result == "correct":
             st.success("The tree hands you a glowing key!")
             st.session_state.inventory.append("Glowing Key")
@@ -63,10 +80,10 @@ def forest_scene():
 def tower_scene():
     st.title("The Echo Tower")
     st.write("You stand before the towering spire. A final puzzle blocks your way: a sequence of tones to replicate.")
-    st.write("The tones play: 🎵 Do-Re-Mi-Fa 🎵")
+    st.audio("path_to_hint_audio/tower_hint.mp3", format="audio/mp3")
     audio_input = st.audio_input("Replicate the tones using your voice")
     if audio_input:
-        result = analyze_audio(audio_input)
+        result = analyze_audio(audio_input, target_pitch=523.25)  # Example target pitch: 523.25Hz (C5)
         if result == "correct":
             st.success("The tones resonate perfectly. The tower’s gate opens, revealing its mysteries!")
             st.balloons()
