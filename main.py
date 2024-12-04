@@ -178,28 +178,28 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("🎧 Modified Audio")
     if audio_bytes:
-        # Define effect functions (include all effect functions here)
+        # Define effect functions
 
-        def apply_reverb(data, amount):
+        def apply_reverb(data, sr_rate, amount):
             ir = np.zeros(int(sr_rate * 0.3))
             ir[0] = 1.0
             ir[int(len(ir) * 0.5):] = amount
             return np.convolve(data, ir, mode='full')[:len(data)]
 
-        def apply_echo(data, delay_ms, decay):
+        def apply_echo(data, sr_rate, delay_ms, decay):
             delay_samples = int(sr_rate * (delay_ms / 1000.0))
             echo_data = np.zeros(len(data) + delay_samples)
             echo_data[:len(data)] = data
             echo_data[delay_samples:] += data * decay
             return echo_data[:len(data)]
 
-        def apply_pitch_shift(data, n_steps):
+        def apply_pitch_shift(data, sr_rate, n_steps):
             return librosa.effects.pitch_shift(data, sr_rate, n_steps=n_steps)
 
         def apply_speed_change(data, rate):
             return librosa.effects.time_stretch(data, rate)
 
-        def apply_equalization(data, low_gain, mid_gain, high_gain):
+        def apply_equalization(data, sr_rate, low_gain, mid_gain, high_gain):
             S = librosa.stft(data)
             frequencies = librosa.fft_frequencies(sr=sr_rate)
             low_freqs = frequencies < 500
@@ -210,20 +210,21 @@ with tabs[1]:
             S[high_freqs, :] *= 10 ** (high_gain / 20)
             return librosa.istft(S)
 
-        def apply_chorus(data, rate, depth):
+        def apply_chorus(data, sr_rate, rate, depth):
             t = np.arange(len(data)) / sr_rate
             mod = depth * np.sin(2 * np.pi * rate * t)
             chorus_data = np.interp(t + mod, t, data, left=0, right=0)
             return data + chorus_data
 
-        def apply_flanger(data, rate, depth):
+        def apply_flanger(data, sr_rate, rate, depth):
             t = np.arange(len(data)) / sr_rate
             delay = depth * np.sin(2 * np.pi * rate * t)
             delay_samples = (delay * sr_rate).astype(int)
             flanged = np.copy(data)
             for i in range(len(data)):
-                if i - delay_samples[i] >= 0:
-                    flanged[i] += data[i - delay_samples[i]]
+                idx = i - delay_samples[i]
+                if idx >= 0 and idx < len(data):
+                    flanged[i] += data[idx]
             return flanged / 2
 
         def apply_distortion(data, gain):
@@ -237,7 +238,7 @@ with tabs[1]:
                 threshold + (np.abs(data[over_threshold]) - threshold) / ratio)
             return compressed
 
-        def apply_phaser(data, rate, depth):
+        def apply_phaser(data, sr_rate, rate, depth):
             t = np.arange(len(data)) / sr_rate
             phase = depth * np.sin(2 * np.pi * rate * t)
             phaser_data = np.copy(data)
@@ -245,39 +246,39 @@ with tabs[1]:
                 phaser_data[i] += phase[i] * data[i - 1]
             return phaser_data
 
-        def apply_wahwah(data, rate, depth):
+        def apply_wahwah(data, sr_rate, rate, depth):
             t = np.arange(len(data)) / sr_rate
             wah = depth * np.sin(2 * np.pi * rate * t)
             wah_data = data * (1 + wah)
             return wah_data
 
         # Apply selected effects
-        def apply_effects(data):
+        def apply_effects(data, sr_rate):
             modified = data.copy()
             if effects["Reverb"]:
-                modified = apply_reverb(modified, params["reverb_amount"])
+                modified = apply_reverb(modified, sr_rate, params["reverb_amount"])
             if effects["Echo"]:
-                modified = apply_echo(modified, params["echo_delay"], params["echo_decay"])
+                modified = apply_echo(modified, sr_rate, params["echo_delay"], params["echo_decay"])
             if effects["Pitch Shift"]:
-                modified = apply_pitch_shift(modified, params["pitch_steps"])
+                modified = apply_pitch_shift(modified, sr_rate, params["pitch_steps"])
             if effects["Speed Change"]:
                 modified = apply_speed_change(modified, params["speed_rate"])
             if effects["Equalization"]:
-                modified = apply_equalization(modified, params["eq_low_gain"],
+                modified = apply_equalization(modified, sr_rate, params["eq_low_gain"],
                                               params["eq_mid_gain"], params["eq_high_gain"])
             if effects["Chorus"]:
-                modified = apply_chorus(modified, params["chorus_rate"], params["chorus_depth"])
+                modified = apply_chorus(modified, sr_rate, params["chorus_rate"], params["chorus_depth"])
             if effects["Flanger"]:
-                modified = apply_flanger(modified, params["flanger_rate"], params["flanger_depth"])
+                modified = apply_flanger(modified, sr_rate, params["flanger_rate"], params["flanger_depth"])
             if effects["Distortion"]:
                 modified = apply_distortion(modified, params["distortion_gain"])
             if effects["Compression"]:
                 modified = apply_compression(modified, params["compression_threshold"],
                                              params["compression_ratio"])
             if effects["Phaser"]:
-                modified = apply_phaser(modified, params["phaser_rate"], params["phaser_depth"])
+                modified = apply_phaser(modified, sr_rate, params["phaser_rate"], params["phaser_depth"])
             if effects["Wah-Wah"]:
-                modified = apply_wahwah(modified, params["wah_rate"], params["wah_depth"])
+                modified = apply_wahwah(modified, sr_rate, params["wah_rate"], params["wah_depth"])
             # Normalize to prevent clipping
             max_abs = np.max(np.abs(modified))
             if max_abs > 1.0:
@@ -285,7 +286,7 @@ with tabs[1]:
             return modified
 
         with st.spinner("Applying effects..."):
-            modified_data = apply_effects(audio_data)
+            modified_data = apply_effects(audio_data, sr_rate)
 
         # Save modified audio to buffer
         modified_audio = io.BytesIO()
