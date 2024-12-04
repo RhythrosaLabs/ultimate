@@ -83,6 +83,7 @@ if audio_data:
             st.error(f"❌ Error analyzing audio: {e}")
 
     # Add effects option
+    st.write("### Step 4: Apply effects to your recording")
     effect_option = st.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify"])
     if effect_option != "None":
         with open("temp_audio.wav", "wb") as f:
@@ -92,5 +93,16 @@ if audio_data:
             frame_rate = wav_file.getframerate()
             audio_signal = np.frombuffer(frames, dtype=np.int16)
             processed_signal = apply_effect(effect_option, audio_signal, frame_rate)
-            st.write(f"Effect Applied: {effect_option}")
+
+            st.write(f"### Effect Applied: {effect_option}")
             st.line_chart(processed_signal[:min(1000, len(processed_signal))])
+
+            # Allow users to save the processed audio
+            save_effect_option = st.checkbox("Save processed audio")
+            if save_effect_option:
+                with wave.open("processed_audio.wav", "wb") as processed_file:
+                    processed_file.setnchannels(1)
+                    processed_file.setsampwidth(2)  # Assuming 16-bit audio
+                    processed_file.setframerate(frame_rate)
+                    processed_file.writeframes(processed_signal.astype(np.int16).tobytes())
+                st.success("✅ Processed audio saved as 'processed_audio.wav'")
