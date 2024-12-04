@@ -101,9 +101,9 @@ if audio_data:
         except Exception as e:
             st.error(f"❌ Error analyzing audio: {e}")
 
-    # Add effects option
-    st.write("### Step 4: Apply effects to your recording")
-    effect_option = st.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"])
+    # Add effects in sidebar
+    st.sidebar.write("### Apply effects to your recording")
+    effect_option = st.sidebar.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"])
     if effect_option != "None":
         with open("temp_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
@@ -117,7 +117,7 @@ if audio_data:
             st.line_chart(processed_signal[:min(1000, len(processed_signal))])
 
             # Allow users to save the processed audio
-            save_effect_option = st.checkbox("Save processed audio")
+            save_effect_option = st.sidebar.checkbox("Save processed audio")
             if save_effect_option:
                 with wave.open("processed_audio.wav", "wb") as processed_file:
                     processed_file.setnchannels(1)
