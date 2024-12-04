@@ -1,4 +1,6 @@
 import streamlit as st
+import wave
+import numpy as np
 
 # Set the title of the Streamlit app
 st.title("Audio Recorder and Playback")
@@ -28,5 +30,28 @@ if audio_data:
     analyze_option = st.checkbox("Analyze this recording")
 
     if analyze_option:
-        # Placeholder for audio analysis
-        st.write("Audio analysis is not implemented yet. This feature will provide insights like duration, frequency spectrum, or other properties.")
+        # Save audio data temporarily for analysis
+        with open("temp_audio.wav", "wb") as f:
+            f.write(audio_data.getbuffer())
+
+        # Perform audio analysis
+        try:
+            with wave.open("temp_audio.wav", "rb") as wav_file:
+                frames = wav_file.readframes(-1)
+                frame_rate = wav_file.getframerate()
+                n_channels = wav_file.getnchannels()
+                sample_width = wav_file.getsampwidth()
+                n_frames = wav_file.getnframes()
+
+                st.write("#### Audio Analysis")
+                st.write(f"**Duration:** {n_frames / frame_rate:.2f} seconds")
+                st.write(f"**Sample Rate:** {frame_rate} Hz")
+                st.write(f"**Channels:** {n_channels}")
+                st.write(f"**Sample Width:** {sample_width} bytes")
+
+                # Compute amplitude (for visualization purposes)
+                audio_signal = np.frombuffer(frames, dtype=np.int16)
+                st.line_chart(audio_signal[:min(1000, len(audio_signal))])
+
+        except Exception as e:
+            st.error(f"Error analyzing audio: {e}")
