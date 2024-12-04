@@ -1325,8 +1325,11 @@ def main():
             'synth_sustain': synth_sustain,
             'synth_release': synth_release
         }
-        save_preset(current_params, preset_name)
-        st.sidebar.success(f"Preset '{preset_name}' saved!")
+        if preset_name.strip() == "":
+            st.sidebar.error("Please enter a valid preset name.")
+        else:
+            save_preset(current_params, preset_name)
+            st.sidebar.success(f"Preset '{preset_name}' saved!")
 
     available_presets = list_presets()
     if available_presets:
@@ -1347,6 +1350,16 @@ def main():
     if 'temp_dir' not in st.session_state:
         st.session_state['temp_dir'] = tempfile.TemporaryDirectory()
         st.session_state['generated_files'] = []
+
+    # Define number of samples to generate
+    num_samples = st.sidebar.number_input(
+        "Number of Samples",
+        min_value=1,
+        max_value=100,
+        value=1,
+        step=1,
+        help="Specify how many noise samples you want to generate."
+    )
 
     # Audio Input Component in Main Area
     st.subheader("🎙️ Record Audio to Include")
@@ -1419,6 +1432,12 @@ def main():
                 combined_data += data
 
             # Generate waveform types
+            waveform_frequencies = {
+                "Sine Wave": 440,       # A4
+                "Square Wave": 440,     # A4
+                "Sawtooth Wave": 440,   # A4
+                "Triangle Wave": 440    # A4
+            }
             for waveform_type in waveform_types:
                 frequency = waveform_frequencies.get(waveform_type, 440)  # Default to 440 Hz if not set
                 # Apply variation to frequency
@@ -1502,30 +1521,33 @@ def main():
                 combined_data += y
 
             # Voice changer feature
-            if voice_changer and voice_file is not None:
-                voice_bytes = voice_file.read()
-                try:
-                    y_voice, sr_voice = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
-                except Exception as e:
-                    st.error(f"Error loading voice recording: {e}")
-                    y_voice = np.zeros(total_samples, dtype=np.float32)
+            if voice_changer:
+                # Add a new audio input for voice changer if not already present
+                voice_file = st.audio_input("🎤 Upload Voice Recording for Changer")
+                if voice_file is not None:
+                    voice_bytes = voice_file.read()
+                    try:
+                        y_voice, sr_voice = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
+                    except Exception as e:
+                        st.error(f"Error loading voice recording: {e}")
+                        y_voice = np.zeros(total_samples, dtype=np.float32)
 
-                # Pitch shift by specified semitones
-                try:
-                    y_shifted = pitch_shift_audio(y_voice, sr_voice, semitones=pitch_shift_semitones)
-                except Exception as e:
-                    st.error(f"Error applying pitch shift: {e}")
-                    y_shifted = y_voice
+                    # Pitch shift by specified semitones
+                    try:
+                        y_shifted = pitch_shift_audio(y_voice, sr_voice, semitones=pitch_shift_semitones)
+                    except Exception as e:
+                        st.error(f"Error applying pitch shift: {e}")
+                        y_shifted = y_voice
 
-                # Ensure length matches
-                y_shifted = y_shifted[:total_samples]
-                if len(y_shifted) < total_samples:
-                    y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
-                y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
-                y_shifted = y_shifted.astype(np.float32)  # Ensure float type
+                    # Ensure length matches
+                    y_shifted = y_shifted[:total_samples]
+                    if len(y_shifted) < total_samples:
+                        y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
+                    y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
+                    y_shifted = y_shifted.astype(np.float32)  # Ensure float type
 
-                # Combine with existing data
-                combined_data += y_shifted
+                    # Combine with existing data
+                    combined_data += y_shifted
 
             # Include algorithmic composition
             if algorithmic_composition and composition_type is not None:
@@ -1714,5 +1736,6 @@ def main():
                     mime="application/zip"
                 )
 
+# Run the main function
 if __name__ == "__main__":
     main()
