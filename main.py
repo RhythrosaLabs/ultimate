@@ -1,3 +1,4 @@
+
 import streamlit as st
 import numpy as np
 from scipy.io.wavfile import write
@@ -1487,66 +1488,44 @@ def main():
             # Handle recorded audio
             if recorded_audio is not None:
                 audio_bytes = recorded_audio.read()
-                if audio_bytes != b'':
-                    try:
-                        y, sr_loaded = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
-                    except Exception as e:
-                        st.error(f"Error loading recorded audio: {e}")
-                        y = np.zeros(total_samples, dtype=np.float32)
+                try:
+                    y, sr_loaded = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+                except Exception as e:
+                    st.error(f"Error loading recorded audio: {e}")
+                    y = np.zeros(total_samples, dtype=np.float32)
 
-                    y = y[:total_samples]  # Ensure length matches
-                    if len(y) < total_samples:
-                        y = np.pad(y, (0, total_samples - len(y)), 'constant')
-                    # Avoid division by zero
-                    if np.max(np.abs(y)) > 1e-7:
-                        y = y / np.max(np.abs(y))
-                    y = y.astype(np.float32)  # Ensure float type
+                y = y[:total_samples]  # Ensure length matches
+                if len(y) < total_samples:
+                    y = np.pad(y, (0, total_samples - len(y)), 'constant')
+                y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+                y = y.astype(np.float32)  # Ensure float type
 
-                    # Convert to stereo if necessary
-                    if channels == "Stereo":
-                        y = pan_stereo(y, panning)
-
-                    # Combine with existing data
-                    try:
-                        combined_data += y
-                    except ValueError as ve:
-                        st.error(f"Error combining recorded audio: {ve}")
-                        continue  # Skip to next sample
+                # Combine with existing data
+                combined_data += y
 
             # Include uploaded audio file
             if uploaded_file is not None:
                 audio_bytes = uploaded_file.read()
-                if audio_bytes != b'':
-                    try:
-                        y, sr_uploaded = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
-                    except Exception as e:
-                        st.error(f"Error loading uploaded audio: {e}")
-                        y = np.zeros(total_samples, dtype=np.float32)
+                try:
+                    y, sr_uploaded = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+                except Exception as e:
+                    st.error(f"Error loading uploaded audio: {e}")
+                    y = np.zeros(total_samples, dtype=np.float32)
 
-                    y = y[:total_samples]  # Ensure length matches
-                    if len(y) < total_samples:
-                        y = np.pad(y, (0, total_samples - len(y)), 'constant')
-                    # Avoid division by zero
-                    if np.max(np.abs(y)) > 1e-7:
-                        y = y / np.max(np.abs(y))
-                    y = y.astype(np.float32)  # Ensure float type
+                y = y[:total_samples]  # Ensure length matches
+                if len(y) < total_samples:
+                    y = np.pad(y, (0, total_samples - len(y)), 'constant')
+                y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+                y = y.astype(np.float32)  # Ensure float type
 
-                    # Convert to stereo if necessary
-                    if channels == "Stereo":
-                        y = pan_stereo(y, panning)
-
-                    # Combine with existing data
-                    try:
-                        combined_data += y
-                    except ValueError as ve:
-                        st.error(f"Error combining uploaded audio: {ve}")
-                        continue  # Skip to next sample
+                # Combine with existing data
+                combined_data += y
 
             # Voice changer feature
             if voice_changer:
-                # Add a separate audio input for voice changer
+                # Add a new audio input for voice changer if not already present
                 voice_file = st.audio_input("🎤 Upload Voice Recording for Changer")
-                if voice_file is not None and voice_file.read() != b'':
+                if voice_file is not None:
                     voice_bytes = voice_file.read()
                     try:
                         y_voice, sr_voice = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
@@ -1561,24 +1540,15 @@ def main():
                         st.error(f"Error applying pitch shift: {e}")
                         y_shifted = y_voice
 
+                    # Ensure length matches
                     y_shifted = y_shifted[:total_samples]
                     if len(y_shifted) < total_samples:
                         y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
-                    # Avoid division by zero
-                    if np.max(np.abs(y_shifted)) > 1e-7:
-                        y_shifted = y_shifted / np.max(np.abs(y_shifted))
+                    y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
                     y_shifted = y_shifted.astype(np.float32)  # Ensure float type
 
-                    # Convert to stereo if necessary
-                    if channels == "Stereo":
-                        y_shifted = pan_stereo(y_shifted, panning)
-
                     # Combine with existing data
-                    try:
-                        combined_data += y_shifted
-                    except ValueError as ve:
-                        st.error(f"Error combining voice-changed audio: {ve}")
-                        continue  # Skip to next sample
+                    combined_data += y_shifted
 
             # Include algorithmic composition
             if algorithmic_composition and composition_type is not None:
@@ -1595,10 +1565,7 @@ def main():
                 combined_data += data
 
             # Normalize combined data
-            if np.max(np.abs(combined_data)) > 1e-7:
-                combined_data = combined_data / np.max(np.abs(combined_data))
-            else:
-                combined_data = combined_data
+            combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
 
             # Make a copy for plotting before converting to integer types
             plot_data = combined_data.copy()
@@ -1709,20 +1676,11 @@ def main():
                 plot_data = pan_stereo(plot_data, panning)
 
             # Normalize audio again after all processing
-            if channels == "Stereo":
-                max_val = np.max(np.abs(combined_data)) + 1e-7
-                combined_data = combined_data / max_val
-                plot_data = plot_data / max_val
-            else:
-                if np.max(np.abs(combined_data)) > 1e-7:
-                    combined_data = combined_data / np.max(np.abs(combined_data))
-                plot_data = plot_data / np.max(np.abs(plot_data) + 1e-7)
+            combined_data = combined_data / np.max(np.abs(combined_data) + 1e-7)
+            plot_data = plot_data / np.max(np.abs(plot_data) + 1e-7)
 
             # Convert to int16 for saving
-            if channels == "Stereo":
-                combined_data = (combined_data * 32767).astype(np.int16)
-            else:
-                combined_data = (combined_data * 32767).astype(np.int16)
+            combined_data = (combined_data * 32767).astype(np.int16)
 
             # Generate a unique filename
             filename = f"industrial_noise_{sample_num + 1}.wav"
@@ -1737,31 +1695,22 @@ def main():
 
             # Create interactive waveform plot
             fig = go.Figure()
-            if channels == "Stereo":
-                fig.add_trace(go.Scatter(y=plot_data[:, 0], mode='lines', name='Left Channel'))
-                fig.add_trace(go.Scatter(y=plot_data[:, 1], mode='lines', name='Right Channel'))
-            else:
-                fig.add_trace(go.Scatter(y=plot_data, mode='lines', name='Waveform'))
+            fig.add_trace(go.Scatter(y=plot_data, mode='lines', name='Waveform'))
             fig.update_layout(
                 title='Interactive Waveform',
                 xaxis_title='Sample',
                 yaxis_title='Amplitude',
                 height=400,
-                margin=dict(l=0, r=0, t=30, b=0),
-                template='plotly_dark'
+                margin=dict(l=0, r=0, t=30, b=0)
             )
             st.plotly_chart(fig, use_container_width=True)
 
             # Create spectrogram
             try:
-                if channels == "Stereo":
-                    # Use only the left channel for spectrogram
-                    D = librosa.stft(plot_data[:, 0])
-                else:
-                    D = librosa.stft(plot_data)
+                D = librosa.stft(plot_data)
                 S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
                 fig, ax = plt.subplots(figsize=(10, 4))
-                img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax, sr=sample_rate)
+                img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax)
                 fig.colorbar(img, ax=ax, format='%+2.0f dB')
                 ax.set_title('Spectrogram')
                 st.pyplot(fig)
@@ -1787,3 +1736,7 @@ def main():
                     file_name=zip_filename,
                     mime="application/zip"
                 )
+
+# Run the main function
+if __name__ == "__main__":
+    main()
