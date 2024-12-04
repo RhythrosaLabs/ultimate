@@ -1,7 +1,8 @@
 import streamlit as st
 import wave
 import numpy as np
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter, hilbert
+from scipy.fftpack import fft
 from streamlit.components.v1 import html
 
 # Helper function to apply audio effects
@@ -14,6 +15,24 @@ def apply_effect(effect_type, audio_signal, sample_rate):
         return lfilter(b, a, audio_signal)
     elif effect_type == "Amplify":
         return audio_signal * 2
+    elif effect_type == "Echo":
+        echo_signal = np.zeros(len(audio_signal) + sample_rate)
+        echo_signal[:len(audio_signal)] = audio_signal
+        echo_signal[sample_rate:] += audio_signal * 0.6
+        return echo_signal[:len(audio_signal)]
+    elif effect_type == "Reverb":
+        reverb_signal = np.convolve(audio_signal, np.ones(500) / 500, mode='same')
+        return reverb_signal
+    elif effect_type == "Distortion":
+        return np.clip(audio_signal, -10000, 10000)
+    elif effect_type == "FFT Filter":
+        transformed = fft(audio_signal)
+        filtered = np.where(np.abs(transformed) > 500000, transformed, 0)
+        return np.real(np.fft.ifft(filtered))
+    elif effect_type == "Envelope Modulation":
+        analytic_signal = hilbert(audio_signal)
+        amplitude_envelope = np.abs(analytic_signal)
+        return amplitude_envelope
     return audio_signal
 
 # Set the title of the Streamlit app
@@ -84,7 +103,7 @@ if audio_data:
 
     # Add effects option
     st.write("### Step 4: Apply effects to your recording")
-    effect_option = st.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify"])
+    effect_option = st.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"])
     if effect_option != "None":
         with open("temp_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
