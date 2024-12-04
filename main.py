@@ -6,14 +6,14 @@ from streamlit.components.v1 import html
 # Set the title of the Streamlit app
 st.title("🎙️ Audio Recorder and Playback")
 
-# Add a stylish description with HTML
+# Add a stylish description with Apple-inspired design
 html_description = """
-<div style="background-color:#f0f8ff;padding:10px;border-radius:10px;">
-    <h3 style="color:#4a90e2;">Welcome to the Audio Recorder App!</h3>
-    <p style="color:#333;">Record your audio, play it back, analyze its properties, and save it for later use.</p>
+<div style="background-color:#f5f5f7;padding:20px;border-radius:20px;box-shadow:0 4px 8px rgba(0, 0, 0, 0.1);">
+    <h1 style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#1d1d1f;">Welcome to the Audio Recorder</h1>
+    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;">Seamlessly record, analyze, and save your audio files with a sleek, modern interface.</p>
 </div>
 """
-html(html_description, height=120)
+html(html_description, height=180)
 
 # Display the audio input widget
 st.write("### Step 1: Record your audio")
@@ -51,15 +51,15 @@ if audio_data:
                 n_frames = wav_file.getnframes()
 
                 analysis_html = f"""
-                <div style="background-color:#e8f5e9;padding:10px;border-radius:10px;">
-                    <h4 style="color:#388e3c;">Audio Analysis</h4>
-                    <p><strong>Duration:</strong> {n_frames / frame_rate:.2f} seconds</p>
-                    <p><strong>Sample Rate:</strong> {frame_rate} Hz</p>
-                    <p><strong>Channels:</strong> {n_channels}</p>
-                    <p><strong>Sample Width:</strong> {sample_width} bytes</p>
+                <div style="background-color:#ffffff;padding:20px;border-radius:15px;box-shadow:0 4px 8px rgba(0, 0, 0, 0.1);">
+                    <h2 style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#1d1d1f;">Audio Analysis</h2>
+                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Duration:</strong> {n_frames / frame_rate:.2f} seconds</p>
+                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Sample Rate:</strong> {frame_rate} Hz</p>
+                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Channels:</strong> {n_channels}</p>
+                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Sample Width:</strong> {sample_width} bytes</p>
                 </div>
                 """
-                html(analysis_html, height=200)
+                html(analysis_html, height=250)
 
                 # Compute amplitude (for visualization purposes)
                 audio_signal = np.frombuffer(frames, dtype=np.int16)
