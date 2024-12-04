@@ -18,3 +18,4 @@ tensorflow
 tensorflow-hub
 plotly
 SpeechRecognition
+streamlit-advanced-audio
