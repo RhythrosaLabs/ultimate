@@ -1,12 +1,19 @@
 import streamlit as st
 import wave
 import numpy as np
+from streamlit.components.v1 import html
 
 # Set the title of the Streamlit app
-st.title("Audio Recorder and Playback")
+st.title("🎙️ Audio Recorder and Playback")
 
-# Provide a brief description of the app
-st.write("Record your audio, play it back, and optionally save it as a file.")
+# Add a stylish description with HTML
+html_description = """
+<div style="background-color:#f0f8ff;padding:10px;border-radius:10px;">
+    <h3 style="color:#4a90e2;">Welcome to the Audio Recorder App!</h3>
+    <p style="color:#333;">Record your audio, play it back, analyze its properties, and save it for later use.</p>
+</div>
+"""
+html(html_description, height=120)
 
 # Display the audio input widget
 st.write("### Step 1: Record your audio")
@@ -25,7 +32,7 @@ if audio_data:
     if save_option:
         with open("recorded_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
-        st.success("Audio recording saved as 'recorded_audio.wav'")
+        st.success("✅ Audio recording saved as 'recorded_audio.wav'")
 
     analyze_option = st.checkbox("Analyze this recording")
 
@@ -43,15 +50,20 @@ if audio_data:
                 sample_width = wav_file.getsampwidth()
                 n_frames = wav_file.getnframes()
 
-                st.write("#### Audio Analysis")
-                st.write(f"**Duration:** {n_frames / frame_rate:.2f} seconds")
-                st.write(f"**Sample Rate:** {frame_rate} Hz")
-                st.write(f"**Channels:** {n_channels}")
-                st.write(f"**Sample Width:** {sample_width} bytes")
+                analysis_html = f"""
+                <div style="background-color:#e8f5e9;padding:10px;border-radius:10px;">
+                    <h4 style="color:#388e3c;">Audio Analysis</h4>
+                    <p><strong>Duration:</strong> {n_frames / frame_rate:.2f} seconds</p>
+                    <p><strong>Sample Rate:</strong> {frame_rate} Hz</p>
+                    <p><strong>Channels:</strong> {n_channels}</p>
+                    <p><strong>Sample Width:</strong> {sample_width} bytes</p>
+                </div>
+                """
+                html(analysis_html, height=200)
 
                 # Compute amplitude (for visualization purposes)
                 audio_signal = np.frombuffer(frames, dtype=np.int16)
                 st.line_chart(audio_signal[:min(1000, len(audio_signal))])
 
         except Exception as e:
-            st.error(f"Error analyzing audio: {e}")
+            st.error(f"❌ Error analyzing audio: {e}")
