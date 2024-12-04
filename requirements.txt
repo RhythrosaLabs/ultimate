@@ -17,3 +17,5 @@ soundfile
 tensorflow
 tensorflow-hub
 plotly
+SpeechRecognition
+annotated_text
