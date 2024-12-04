@@ -18,3 +18,4 @@ tensorflow
 tensorflow-hub
 plotly
 SpeechRecognition
+annotated-text
