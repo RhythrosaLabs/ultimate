@@ -1,109 +1,59 @@
 import streamlit as st
 import numpy as np
-import librosa
-import random
+import matplotlib.pyplot as plt
+import wave
+import io
+import speech_recognition as sr
+from annotated_text import annotated_text
 
-# Initialize game state
-if "game_state" not in st.session_state:
-    st.session_state.game_state = "start"
-    st.session_state.inventory = []
-    st.session_state.completed_puzzles = []
+# Title of the app
+st.title("🎤 Interactive Audio Recorder and Transcriber")
 
-# Helper functions
-def analyze_audio(audio_input, target_pitch=None, target_beat=None):
-    """
-    Analyze the audio input for pitch or beat matching.
-    """
-    # Placeholder for pitch/beat analysis
-    try:
-        audio_data, sr = librosa.load(audio_input.name, sr=None)
-        pitches, magnitudes = librosa.piptrack(y=audio_data, sr=sr)
-        beat_times = librosa.beat.beat_track(y=audio_data, sr=sr)[1]
+# Record audio using st.audio_input
+audio_data = st.audio_input("Please record your message:")
 
-        # Check if the target pitch or beat is met (simplified)
-        if target_pitch:
-            if any(np.isclose(pitches, target_pitch, atol=50)):
-                return "correct"
-        if target_beat:
-            if len(beat_times) >= target_beat:
-                return "correct"
-        return "incorrect"
-    except Exception as e:
-        return "incorrect"
+if audio_data:
+    # Display the audio player
+    st.audio(audio_data)
 
-def progress_story():
-    if st.session_state.game_state == "start":
-        st.session_state.game_state = "village"  # Progress to the next stage
-    elif st.session_state.game_state == "village":
-        st.session_state.game_state = "forest"
-    elif st.session_state.game_state == "forest":
-        st.session_state.game_state = "tower"
+    # Read audio data
+    audio_bytes = audio_data.read()
 
-# Game scenes
-def start_scene():
-    st.title("Echoes of the Enigma")
-    st.write("You awaken in the mystical land of Sonaria, where a haunting melody fills the air. Your journey begins at the crossroads. Do you choose to head towards the village or into the dark forest?")
-    choice = st.radio("Choose your path:", ["Village", "Forest"])
-    if st.button("Confirm Choice"):
-        if choice == "Village":
-            st.session_state.game_state = "village"
-        elif choice == "Forest":
-            st.session_state.game_state = "forest"
+    # Save the audio to a temporary file
+    with open("temp_audio.wav", "wb") as f:
+        f.write(audio_bytes)
 
-def village_scene():
-    st.title("The Village")
-    st.write("You arrive at a bustling village entranced by the melody. A villager approaches and says: \"The path to the tower is sealed by a harmonic gate. Can you match the tune?\"")
-    st.audio("path_to_hint_audio/village_hint.mp3", format="audio/mp3")
-    audio_input = st.audio_input("Sing the melody to unlock the gate")
-    if audio_input:
-        result = analyze_audio(audio_input, target_pitch=440)  # Example target pitch: 440Hz (A4)
-        if result == "correct":
-            st.success("The gate opens with a resonant chime!")
-            progress_story()
-        else:
-            st.error("The melody doesn’t match. Try again!")
+    # Visualize the audio waveform
+    with wave.open("temp_audio.wav", "rb") as wav_file:
+        # Extract Raw Audio from Wav File
+        signal = wav_file.readframes(-1)
+        signal = np.frombuffer(signal, dtype=np.int16)
+        framerate = wav_file.getframerate()
 
-def forest_scene():
-    st.title("The Forest")
-    st.write("The forest is alive with whispers. A glowing tree speaks: \"I will grant you a key if you mimic my rhythm.\"")
-    st.audio("path_to_hint_audio/forest_hint.mp3", format="audio/mp3")
-    audio_input = st.audio_input("Clap or mimic the rhythm of the glowing tree")
-    if audio_input:
-        result = analyze_audio(audio_input, target_beat=3)  # Example target beat count
-        if result == "correct":
-            st.success("The tree hands you a glowing key!")
-            st.session_state.inventory.append("Glowing Key")
-            progress_story()
-        else:
-            st.error("The rhythm is incorrect. Listen closely and try again.")
+        # Time axis
+        time = np.linspace(
+            0, len(signal) / framerate, num=len(signal)
+        )
 
-def tower_scene():
-    st.title("The Echo Tower")
-    st.write("You stand before the towering spire. A final puzzle blocks your way: a sequence of tones to replicate.")
-    st.audio("path_to_hint_audio/tower_hint.mp3", format="audio/mp3")
-    audio_input = st.audio_input("Replicate the tones using your voice")
-    if audio_input:
-        result = analyze_audio(audio_input, target_pitch=523.25)  # Example target pitch: 523.25Hz (C5)
-        if result == "correct":
-            st.success("The tones resonate perfectly. The tower’s gate opens, revealing its mysteries!")
-            st.balloons()
-            st.write("Congratulations! You have unlocked the secrets of the Echo Tower and freed Sonaria from its enchantment.")
-            st.session_state.game_state = "end"
-        else:
-            st.error("The tones don’t align. Try again.")
+        # Plot
+        fig, ax = plt.subplots()
+        ax.plot(time, signal)
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Amplitude")
+        ax.set_title("Audio Waveform")
+        st.pyplot(fig)
 
-def end_scene():
-    st.title("The End")
-    st.write("Thank you for playing Echoes of the Enigma! Your voice has brought harmony to the land.")
-
-# Game state manager
-if st.session_state.game_state == "start":
-    start_scene()
-elif st.session_state.game_state == "village":
-    village_scene()
-elif st.session_state.game_state == "forest":
-    forest_scene()
-elif st.session_state.game_state == "tower":
-    tower_scene()
-elif st.session_state.game_state == "end":
-    end_scene()
+    # Transcribe audio to text
+    recognizer = sr.Recognizer()
+    with sr.AudioFile("temp_audio.wav") as source:
+        audio = recognizer.record(source)
+        try:
+            transcription = recognizer.recognize_google(audio)
+            st.subheader("Transcription:")
+            annotated_text(
+                ("", transcription, "#8ef")
+            )
+        except sr.UnknownValueError:
+            st.error("Google Speech Recognition could not understand the audio.")
+        except sr.RequestError as e:
+            st.error(f"Could not request results from Google Speech Recognition service; {e}")
