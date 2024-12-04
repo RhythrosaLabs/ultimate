@@ -28,7 +28,7 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 st.title("🎶 Advanced Audio Recorder with Effect Stacking")
 st.markdown(
     """
-    Record, play, and enhance your audio with multiple effects applied simultaneously.
+    Upload, play, and enhance your audio with multiple effects applied simultaneously.
     """
 )
 
@@ -39,14 +39,14 @@ if 'recordings' not in st.session_state:
 if 'saved_session' not in st.session_state:
     st.session_state.saved_session = None
 
-# Record audio
-st.header("1️⃣ Record Audio")
-audio_file = st.audio_input("Press the button to start recording:")
+# Upload audio
+st.header("1️⃣ Upload Audio")
+audio_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "ogg"])
 
 if audio_file:
     # Read audio data
     audio_bytes = audio_file.read()
-    audio_data, sr_rate = librosa.load(io.BytesIO(audio_bytes), sr=None)
+    audio_data, sr_rate = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
 
     # Save recording in session state
     recording_name = f"Recording {len(st.session_state.recordings) + 1}"
@@ -68,7 +68,7 @@ if st.session_state.recordings:
     sr_rate = st.session_state.recordings[rec_index]['sr_rate']
     audio_bytes = st.session_state.recordings[rec_index]['audio_bytes']
 else:
-    st.info("No recordings available. Please record audio to use this feature.")
+    st.info("No recordings available. Please upload audio to use this feature.")
     audio_data = None
     sr_rate = None
     audio_bytes = None
@@ -173,11 +173,11 @@ with tabs[0]:
         ax_original.set_ylabel("Amplitude")
         st.pyplot(fig_original)
     else:
-        st.info("No audio data available. Please record audio to view waveform.")
+        st.info("No audio data available. Please upload audio to view waveform.")
 
 with tabs[1]:
     st.subheader("🎧 Modified Audio")
-    if audio_bytes:
+    if audio_bytes and audio_data is not None:
         # Define effect functions
 
         def apply_reverb(data, sr_rate, amount):
@@ -197,7 +197,11 @@ with tabs[1]:
             return librosa.effects.pitch_shift(data, sr_rate, n_steps=n_steps)
 
         def apply_speed_change(data, rate):
-            return librosa.effects.time_stretch(data, rate)
+            try:
+                return librosa.effects.time_stretch(data, 1.0 / rate)
+            except Exception as e:
+                st.error(f"Error in apply_speed_change: {e}")
+                return data
 
         def apply_equalization(data, sr_rate, low_gain, mid_gain, high_gain):
             S = librosa.stft(data)
@@ -224,7 +228,7 @@ with tabs[1]:
             for i in range(len(data)):
                 idx = i - delay_samples[i]
                 if idx >= 0 and idx < len(data):
-                    flanged[i] += data[idx]
+                    flanged[i] += data[int(idx)]
             return flanged / 2
 
         def apply_distortion(data, gain):
@@ -300,7 +304,7 @@ with tabs[1]:
         ax_modified.set_ylabel("Amplitude")
         st.pyplot(fig_modified)
     else:
-        st.info("No audio data available. Please record audio to apply effects.")
+        st.info("No audio data available. Please upload audio to apply effects.")
 
 # Session saving/loading
 st.header("4️⃣ Session Management")
