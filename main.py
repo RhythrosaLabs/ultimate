@@ -1,7 +1,20 @@
 import streamlit as st
 import wave
 import numpy as np
+from scipy.signal import butter, lfilter
 from streamlit.components.v1 import html
+
+# Helper function to apply audio effects
+def apply_effect(effect_type, audio_signal, sample_rate):
+    if effect_type == "Low Pass Filter":
+        b, a = butter(5, 0.1, btype='low', fs=sample_rate)
+        return lfilter(b, a, audio_signal)
+    elif effect_type == "High Pass Filter":
+        b, a = butter(5, 0.1, btype='high', fs=sample_rate)
+        return lfilter(b, a, audio_signal)
+    elif effect_type == "Amplify":
+        return audio_signal * 2
+    return audio_signal
 
 # Set the title of the Streamlit app
 st.title("🎙️ Audio Recorder and Playback")
@@ -19,29 +32,30 @@ html(html_description, height=180)
 st.write("### Step 1: Record your audio")
 audio_data = st.audio_input("Please record your message:")
 
-# If audio is recorded, play it back
+# Input monitoring toggle
+monitoring = st.checkbox("Enable Input Monitoring")
+
+if monitoring and audio_data:
+    st.audio(audio_data, format='audio/wav')
+
+# If audio is recorded, process further
 if audio_data:
     st.write("### Step 2: Play back your recording")
     st.audio(audio_data, format='audio/wav')
 
-    # Provide options for saving the audio and analyzing it
-    st.write("### Step 3: Save or analyze your recording")
-
+    # Save option
+    st.write("### Step 3: Save, analyze, or add effects to your recording")
     save_option = st.checkbox("Save this recording")
-
     if save_option:
         with open("recorded_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
         st.success("✅ Audio recording saved as 'recorded_audio.wav'")
 
+    # Analyze option
     analyze_option = st.checkbox("Analyze this recording")
-
     if analyze_option:
-        # Save audio data temporarily for analysis
         with open("temp_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
-
-        # Perform audio analysis
         try:
             with wave.open("temp_audio.wav", "rb") as wav_file:
                 frames = wav_file.readframes(-1)
@@ -67,3 +81,16 @@ if audio_data:
 
         except Exception as e:
             st.error(f"❌ Error analyzing audio: {e}")
+
+    # Add effects option
+    effect_option = st.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify"])
+    if effect_option != "None":
+        with open("temp_audio.wav", "wb") as f:
+            f.write(audio_data.getbuffer())
+        with wave.open("temp_audio.wav", "rb") as wav_file:
+            frames = wav_file.readframes(-1)
+            frame_rate = wav_file.getframerate()
+            audio_signal = np.frombuffer(frames, dtype=np.int16)
+            processed_signal = apply_effect(effect_option, audio_signal, frame_rate)
+            st.write(f"Effect Applied: {effect_option}")
+            st.line_chart(processed_signal[:min(1000, len(processed_signal))])
