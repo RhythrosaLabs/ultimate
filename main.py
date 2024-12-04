@@ -113,27 +113,6 @@ Welcome to the **Industrial Noise Generator Pro Max with Variations**! This app 
 # Sidebar for parameters
 st.sidebar.header("🎛️ Controls")
 
-st.sidebar.subheader("🎙️ Record Audio")
-recorded_audio = st.audio_input("Record audio to include")
-# Include recorded audio
-if recorded_audio is not None:
-    audio_bytes = recorded_audio.read()
-    # Load the recorded audio
-    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
-    y = y[:total_samples]  # Ensure length matches
-    y = y / np.max(np.abs(y) + 1e-7)  # Normalize
-    y = y.astype(np.float32)  # Ensure float type
-
-    # Adjust lengths if necessary
-    if len(y) != len(combined_data):
-        min_length = min(len(y), len(combined_data))
-        y = y[:min_length]
-        combined_data = combined_data[:min_length]
-
-    combined_data += y
-
-
-
 # Number of samples to generate
 st.sidebar.subheader("🔢 Sample Generation")
 num_samples = st.sidebar.number_input(
@@ -873,465 +852,6 @@ else:
             params['rate'] = rate
         effect_params[effect] = params
 
-    st.sidebar.subheader("🎤 Voice Changer")
-    voice_changer = st.sidebar.checkbox(
-        "Enable Voice Changer (Pitch Shift)",
-        help="Apply a pitch shift to a voice recording."
-    )
-    if voice_changer:
-        voice_file = st.sidebar.file_uploader(
-            "Upload your voice recording",
-            type=["wav", "mp3"],
-            help="Upload a voice recording to apply pitch shift."
-        )
-        pitch_shift_semitones = st.sidebar.slider(
-            "Pitch Shift (semitones)",
-            min_value=-24,
-            max_value=24,
-            value=-5,
-            help="Set the number of semitones to shift the pitch."
-        )
-    else:
-        voice_file = None
-        pitch_shift_semitones = 0
-    st.sidebar.subheader("🎼 Algorithmic Composition")
-    algorithmic_composition = st.sidebar.checkbox(
-        "Enable Algorithmic Composition",
-        help="Include algorithmically composed elements."
-    )
-    if algorithmic_composition:
-        composition_options = ["Random Melody", "Ambient Soundscape", "Rhythmic Pattern"]
-        composition_type = st.sidebar.selectbox(
-            "Composition Type",
-            composition_options,
-            help="Choose a type of algorithmic composition."
-        )
-    else:
-        composition_type = None
-
-# Collect waveform frequencies
-waveform_frequencies = {}
-for waveform_type in waveform_types:
-    frequency = st.sidebar.slider(
-        f"{waveform_type} Frequency (Hz)",
-        min_value=20,
-        max_value=20000,
-        value=440,
-        key=f"{waveform_type}_frequency_slider",
-        help=f"Set the frequency for the {waveform_type.lower()}."
-    )
-    waveform_frequencies[waveform_type] = frequency
-
-# Functions to generate noise
-def generate_white_noise(duration, sample_rate):
-    samples = np.random.normal(0, 1, int(duration * sample_rate))
-    return samples
-
-def generate_pink_noise(duration, sample_rate):
-    # Voss-McCartney algorithm
-    samples = int(duration * sample_rate)
-    n_rows = 16
-    n_columns = int(np.ceil(samples / n_rows))
-    array = np.random.randn(n_rows, n_columns)
-    cumulative = np.cumsum(array, axis=0)
-    pink_noise = cumulative[-1, :]
-    pink_noise = pink_noise[:samples]
-    return pink_noise
-
-def generate_brown_noise(duration, sample_rate):
-    samples = int(duration * sample_rate)
-    brown_noise = np.cumsum(np.random.randn(samples))
-    brown_noise = brown_noise / np.max(np.abs(brown_noise) + 1e-7)
-    return brown_noise
-
-def generate_blue_noise(duration, sample_rate):
-    # Differentiated white noise
-    samples = int(duration * sample_rate)
-    white = np.random.normal(0, 1, samples)
-    blue_noise = np.diff(white)
-    blue_noise = np.concatenate(([0], blue_noise))
-    return blue_noise
-
-def generate_violet_noise(duration, sample_rate):
-    # Differentiated blue noise
-    samples = int(duration * sample_rate)
-    white = np.random.normal(0, 1, samples)
-    violet_noise = np.diff(np.diff(white))
-    violet_noise = np.concatenate(([0, 0], violet_noise))
-    return violet_noise
-
-def generate_grey_noise(duration, sample_rate):
-    # Shaped white noise to match human hearing
-    samples = int(duration * sample_rate)
-    white = np.random.normal(0, 1, samples)
-    freqs = np.fft.rfftfreq(samples, 1/sample_rate)
-    a_weighting = (12200**2 * freqs**4) / ((freqs**2 + 20.6**2) * np.sqrt((freqs**2 + 107.7**2) * (freqs**2 + 737.9**2)) * (freqs**2 + 12200**2))
-    a_weighting = a_weighting / np.max(a_weighting + 1e-7)
-    white_fft = np.fft.rfft(white)
-    grey_fft = white_fft * a_weighting
-    grey_noise = np.fft.irfft(grey_fft)
-    return grey_noise
-
-# Functions to generate waveforms
-def generate_waveform(waveform_type, frequency, duration, sample_rate):
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    if waveform_type == "Sine Wave":
-        waveform = np.sin(2 * np.pi * frequency * t)
-    elif waveform_type == "Square Wave":
-        waveform = signal.square(2 * np.pi * frequency * t)
-    elif waveform_type == "Sawtooth Wave":
-        waveform = signal.sawtooth(2 * np.pi * frequency * t)
-    elif waveform_type == "Triangle Wave":
-        waveform = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
-    else:
-        waveform = np.zeros_like(t)
-    return waveform
-
-def generate_synth_tone(note, duration, sample_rate, waveform='Sine', envelope=None):
-    frequency = note_to_freq(note)
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    if waveform == 'Sine':
-        tone = np.sin(2 * np.pi * frequency * t)
-    elif waveform == 'Square':
-        tone = signal.square(2 * np.pi * frequency * t)
-    elif waveform == 'Sawtooth':
-        tone = signal.sawtooth(2 * np.pi * frequency * t)
-    elif waveform == 'Triangle':
-        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
-    else:
-        tone = np.zeros_like(t)
-    if envelope:
-        tone *= envelope
-    return tone
-
-def note_to_freq(note):
-    # Convert note (e.g., 'A4') to frequency
-    A4_freq = 440.0
-    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F',
-                  'F#', 'G', 'G#', 'A', 'A#', 'B']
-    octave = int(note[-1])
-    key_number = note_names.index(note[:-1])
-    n = key_number + (octave - 4) * 12
-    freq = A4_freq * (2 ** (n / 12))
-    return freq
-
-def generate_envelope(total_samples, sample_rate, attack, decay, sustain, release):
-    envelope = np.zeros(total_samples)
-    attack_samples = int(attack * sample_rate)
-    decay_samples = int(decay * sample_rate)
-    release_samples = int(release * sample_rate)
-    sustain_samples = total_samples - attack_samples - decay_samples - release_samples
-    # Ensure no negative values
-    sustain_samples = max(sustain_samples, 0)
-    # Attack
-    envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
-    # Decay
-    envelope[attack_samples:attack_samples+decay_samples] = np.linspace(1, sustain, decay_samples)
-    # Sustain
-    envelope[attack_samples+decay_samples:attack_samples+decay_samples+sustain_samples] = sustain
-    # Release
-    envelope[-release_samples:] = np.linspace(sustain, 0, release_samples)
-    return envelope
-
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    # Create a bandpass filter
-    nyq = 0.5 * fs
-    low = max(lowcut / nyq, 0.001)
-    high = min(highcut / nyq, 0.999)
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
-
-def apply_filter(data, lowcut, highcut, fs, order=5):
-    # Apply the bandpass filter
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
-
-def apply_fade(data, sample_rate, fade_in, fade_out):
-    # Ensure data is at least two-dimensional
-    if data.ndim == 1:
-        data = data.reshape(-1, 1)
-
-    # Apply fade in/out
-    total_samples = data.shape[0]
-    fade_in_samples = int(fade_in * sample_rate)
-    fade_out_samples = int(fade_out * sample_rate)
-
-    # Ensure fade samples do not exceed total samples
-    fade_in_samples = min(fade_in_samples, total_samples)
-    fade_out_samples = min(fade_out_samples, total_samples)
-
-    # Apply fade-in if applicable
-    if fade_in_samples > 0:
-        fade_in_curve = np.linspace(0, 1, fade_in_samples).reshape(-1, 1)
-        data[:fade_in_samples] *= fade_in_curve
-
-    # Apply fade-out if applicable
-    if fade_out_samples > 0:
-        fade_out_curve = np.linspace(1, 0, fade_out_samples).reshape(-1, 1)
-        data[-fade_out_samples:] *= fade_out_curve
-
-    # Flatten data if original was one-dimensional
-    if data.shape[1] == 1:
-        data = data.flatten()
-
-    return data
-
-def apply_amplitude_modulation(data, sample_rate, mod_freq=5.0):
-    # Apply amplitude modulation
-    t = np.linspace(0, len(data)/sample_rate, num=len(data))
-    modulator = np.sin(2 * np.pi * mod_freq * t)
-    return data * modulator
-
-def apply_frequency_modulation(data, sample_rate, mod_freq=5.0, mod_index=2.0):
-    # Apply frequency modulation
-    t = np.linspace(0, len(data)/sample_rate, num=len(data))
-    carrier = np.sin(2 * np.pi * 440 * t + mod_index * np.sin(2 * np.pi * mod_freq * t))
-    return data * carrier
-
-def apply_reverb(data, sample_rate, decay=0.5):
-    # Simple reverb effect using feedback delay
-    reverb_data = np.copy(data)
-    delay_samples = int(0.02 * sample_rate)
-    for i in range(delay_samples, len(data)):
-        reverb_data[i] += decay * reverb_data[i - delay_samples]
-    return reverb_data
-
-def apply_delay(data, sample_rate, delay_time=0.5, feedback=0.5):
-    # Simple delay effect
-    delay_samples = int(delay_time * sample_rate)
-    delayed_data = np.zeros(len(data) + delay_samples)
-    delayed_data[:len(data)] = data
-    for i in range(len(data)):
-        delayed_data[i + delay_samples] += data[i] * feedback
-    return delayed_data[:len(data)]
-
-def apply_distortion(data, gain=20, threshold=0.5):
-    # Simple distortion effect
-    data = data * gain
-    data[data > threshold] = threshold
-    data[data < -threshold] = -threshold
-    return data
-
-def adjust_bit_depth(data, bit_depth):
-    # Adjust bit depth
-    max_val = 2 ** (bit_depth - 1) - 1
-    data = data * max_val
-    data = np.round(data)
-    data = data / max_val
-    return data
-
-def pan_stereo(data, panning):
-    # Panning for stereo sound
-    left = data * (1 - panning)
-    right = data * panning
-    stereo_data = np.vstack((left, right)).T
-    return stereo_data
-
-def generate_algorithmic_composition(duration, sample_rate, composition_type):
-    if composition_type == "Random Melody":
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        melody = np.zeros_like(t)
-        num_notes = int(duration * 2)  # 2 notes per second
-        note_durations = np.random.uniform(0.1, 0.5, size=num_notes)
-        note_frequencies = np.random.uniform(200, 800, size=num_notes)
-        current_sample = 0
-        for i in range(num_notes):
-            note_duration_samples = int(note_durations[i] * sample_rate)
-            end_sample = current_sample + note_duration_samples
-            if end_sample > len(t):
-                end_sample = len(t)
-            melody[current_sample:end_sample] = np.sin(2 * np.pi * note_frequencies[i] * t[current_sample:end_sample])
-            current_sample = end_sample
-            if current_sample >= len(t):
-                break
-        return melody
-    elif composition_type == "Ambient Soundscape":
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        soundscape = np.sin(2 * np.pi * 220 * t) * np.random.uniform(0.5, 1.0)
-        return soundscape
-    elif composition_type == "Rhythmic Pattern":
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        bpm = 120
-        beat_duration = 60 / bpm
-        num_beats = int(duration / beat_duration)
-        rhythm = np.zeros_like(t)
-        for i in range(num_beats):
-            start_sample = int(i * beat_duration * sample_rate)
-            end_sample = start_sample + int(0.1 * sample_rate)  # 100 ms per beat
-            if end_sample > len(t):
-                end_sample = len(t)
-            rhythm[start_sample:end_sample] = 1.0
-        return rhythm * np.sin(2 * np.pi * 440 * t)
-    else:
-        return np.zeros(int(duration * sample_rate))
-
-def pitch_shift_audio(data, sample_rate, n_steps):
-    # Pitch shift using librosa
-    return librosa.effects.pitch_shift(data, sample_rate, n_steps=n_steps)
-
-def apply_tremolo(data, sample_rate, rate=5.0, depth=0.8):
-    # Tremolo effect
-    t = np.arange(len(data)) / sample_rate
-    tremolo = (1 + depth * np.sin(2 * np.pi * rate * t)) / 2
-    return data * tremolo
-
-def apply_bitcrusher(data, bit_depth):
-    # Bitcrusher effect
-    max_val = 2 ** (bit_depth - 1) - 1
-    data = data * max_val
-    data = np.round(data)
-    data = data / max_val
-    return data
-
-def apply_sample_reduction(data, reduction_factor):
-    # Sample rate reduction
-    reduced_data = data[::reduction_factor]
-    upsampled_data = np.repeat(reduced_data, reduction_factor)
-    upsampled_data = upsampled_data[:len(data)]  # Ensure the length matches
-    return upsampled_data
-
-def apply_reverse(data):
-    # Reverse audio
-    return data[::-1]
-
-def apply_stutter(data, sample_rate, interval=0.1):
-    # Stutter effect
-    stutter_samples = int(interval * sample_rate)
-    num_repeats = 3
-    stuttered_data = []
-    for i in range(0, len(data), stutter_samples):
-        chunk = data[i:i+stutter_samples]
-        for _ in range(num_repeats):
-            stuttered_data.append(chunk)
-    stuttered_data = np.concatenate(stuttered_data)
-    return stuttered_data[:len(data)]
-
-def apply_glitch(data, sample_rate):
-    # Glitch effect
-    glitch_length = int(0.05 * sample_rate)
-    glitch_data = np.copy(data)
-    for i in range(0, len(data), glitch_length * 4):
-        glitch_data[i:i+glitch_length] = 0
-    return glitch_data
-
-def apply_arpeggiation(data, sample_rate, pattern='Ascending'):
-    # Arpeggiation effect
-    num_notes = 4
-    note_length = int(len(data) / num_notes)
-    arpeggiated_data = np.zeros_like(data)
-    indices = list(range(num_notes))
-    if pattern == 'Ascending':
-        pass  # Indices already in ascending order
-    elif pattern == 'Descending':
-        indices = indices[::-1]
-    elif pattern == 'Random':
-        random.shuffle(indices)
-    for idx, i in enumerate(indices):
-        start = i * note_length
-        end = start + note_length
-        arpeggiated_data[start:end] = data[start:end]
-    return arpeggiated_data
-
-def apply_sequencer(data, sample_rate, pattern='Random'):
-    # Sequencer effect
-    sequence_length = int(sample_rate * 0.5)  # 0.5 seconds per sequence
-    num_sequences = len(data) // sequence_length
-    sequences = [data[i*sequence_length:(i+1)*sequence_length] for i in range(num_sequences)]
-    if pattern == 'Ascending':
-        pass
-    elif pattern == 'Descending':
-        sequences = sequences[::-1]
-    elif pattern == 'Random':
-        random.shuffle(sequences)
-    sequenced_data = np.concatenate(sequences)
-    return sequenced_data
-
-def apply_chorus(data, sample_rate, rate=1.5, depth=0.5):
-    # Simple chorus effect
-    delay_samples = int((1 / rate) * sample_rate)
-    modulated_delay = depth * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
-    delayed_data = np.zeros_like(data)
-    for i in range(len(data)):
-        delay = int(delay_samples * (1 + modulated_delay[i]))
-        if i - delay >= 0:
-            delayed_data[i] = data[i - delay]
-    return data + delayed_data
-
-def apply_flanger(data, sample_rate, rate=0.5, depth=0.7):
-    # Simple flanger effect
-    delay_samples = int(0.001 * sample_rate)  # 1 ms delay
-    modulated_delay = depth * delay_samples * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
-    flanged_data = np.zeros_like(data)
-    for i in range(len(data)):
-        delay = int(modulated_delay[i])
-        if i - delay >= 0:
-            flanged_data[i] = data[i] + data[i - delay]
-        else:
-            flanged_data[i] = data[i]
-    return flanged_data
-
-def apply_phaser(data, sample_rate, rate=0.5, depth=0.7):
-    # Simple phaser effect
-    phaser_data = np.copy(data)
-    phase = depth * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
-    phaser_data = np.sin(2 * np.pi * phaser_data + phase)
-    return phaser_data
-
-def apply_compression(data, threshold=0.5, ratio=2.0):
-    # Simple compression effect
-    compressed_data = np.copy(data)
-    over_threshold = np.abs(compressed_data) > threshold
-    compressed_data[over_threshold] = threshold + (compressed_data[over_threshold] - threshold) / ratio
-    compressed_data[compressed_data < -threshold] = -threshold + (compressed_data[compressed_data < -threshold] + threshold) / ratio
-    return compressed_data
-
-def apply_eq(data, sample_rate, bands):
-    # Simple 3-band EQ
-    eq_data = np.copy(data)
-    # Low frequencies (20 Hz - 250 Hz)
-    b, a = butter(2, [20 / (0.5 * sample_rate), 250 / (0.5 * sample_rate)], btype='band')
-    low = lfilter(b, a, data) * (10 ** (bands['low'] / 20))
-    # Mid frequencies (250 Hz - 4 kHz)
-    b, a = butter(2, [250 / (0.5 * sample_rate), 4000 / (0.5 * sample_rate)], btype='band')
-    mid = lfilter(b, a, data) * (10 ** (bands['mid'] / 20))
-    # High frequencies (4 kHz - 20 kHz)
-    b, a = butter(2, [4000 / (0.5 * sample_rate), 20000 / (0.5 * sample_rate)], btype='band')
-    high = lfilter(b, a, data) * (10 ** (bands['high'] / 20))
-    eq_data = low + mid + high
-    return eq_data
-
-def apply_pitch_shift(data, sample_rate, semitones):
-    # Pitch shifting using librosa
-    return librosa.effects.pitch_shift(data, sample_rate, n_steps=semitones)
-
-def apply_highpass_filter(data, sample_rate, cutoff):
-    # High-pass filter
-    b, a = butter(2, cutoff / (0.5 * sample_rate), btype='high')
-    return lfilter(b, a, data)
-
-def apply_lowpass_filter(data, sample_rate, cutoff):
-    # Low-pass filter
-    b, a = butter(2, cutoff / (0.5 * sample_rate), btype='low')
-    return lfilter(b, a, data)
-
-def apply_vibrato(data, sample_rate, rate=5.0, depth=0.5):
-    # Vibrato effect
-    t = np.arange(len(data))
-    vibrato = np.sin(2 * np.pi * rate * t / sample_rate)
-    indices = t + depth * vibrato * sample_rate
-    indices = np.clip(indices, 0, len(data) - 1).astype(int)
-    return data[indices]
-
-def apply_autopan(data, sample_rate, rate=1.0):
-    # Auto-pan effect
-    t = np.arange(len(data)) / sample_rate
-    pan = 0.5 * (1 + np.sin(2 * np.pi * rate * t))
-    left = data * pan
-    right = data * (1 - pan)
-    stereo_data = np.vstack((left, right)).T
-    return stereo_data
-
 # File library functions
 def save_preset(params, name):
     if not os.path.exists('presets'):
@@ -1509,7 +1029,7 @@ def main():
 
             # Generate waveform types
             for waveform_type in waveform_types:
-                frequency = waveform_frequencies[waveform_type]
+                frequency = waveform_frequencies.get(waveform_type, 440)  # Default to 440 Hz if not set
                 # Apply variation to frequency
                 frequency *= frequency_variation
                 data = generate_waveform(waveform_type, frequency, duration, sample_rate)
@@ -1533,8 +1053,13 @@ def main():
                 envelope = generate_envelope(total_samples, sample_rate, synth_attack, synth_decay, synth_sustain, synth_release)
                 synth_data = np.zeros(total_samples, dtype=np.float32)
                 for note in synth_notes:
+                    if not note:
+                        continue
                     # Apply variation to note frequency
-                    note_freq = note_to_freq(note) * frequency_variation
+                    try:
+                        note_freq = note_to_freq(note) * frequency_variation
+                    except:
+                        note_freq = 440  # Default to A4 if note parsing fails
                     # Generate tone with varied frequency
                     tone = generate_synth_tone_from_freq(note_freq, duration, sample_rate, waveform=synth_waveform, envelope=envelope)
                     synth_data += tone
@@ -1549,44 +1074,68 @@ def main():
 
                 combined_data += synth_data
 
-            # Include uploaded audio file
-            if uploaded_file is not None:
-                audio_bytes = uploaded_file.read()
-                # Load the uploaded file
-                y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+            # Handle recorded audio
+            recorded_audio = st.sidebar.audio_input("🎙️ Record Audio to Include")
+            if recorded_audio is not None:
+                audio_bytes = recorded_audio.read()
+                try:
+                    y, sr_loaded = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+                except Exception as e:
+                    st.error(f"Error loading recorded audio: {e}")
+                    y = np.zeros(total_samples, dtype=np.float32)
+
                 y = y[:total_samples]  # Ensure length matches
+                if len(y) < total_samples:
+                    y = np.pad(y, (0, total_samples - len(y)), 'constant')
                 y = y / np.max(np.abs(y) + 1e-7)  # Normalize
                 y = y.astype(np.float32)  # Ensure float type
 
-                # Adjust lengths if necessary
-                if len(y) != len(combined_data):
-                    min_length = min(len(y), len(combined_data))
-                    y = y[:min_length]
-                    combined_data = combined_data[:min_length]
+                # Combine with existing data
+                combined_data += y
 
+            # Include uploaded audio file
+            if uploaded_file is not None:
+                audio_bytes = uploaded_file.read()
+                try:
+                    y, sr_uploaded = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+                except Exception as e:
+                    st.error(f"Error loading uploaded audio: {e}")
+                    y = np.zeros(total_samples, dtype=np.float32)
+
+                y = y[:total_samples]  # Ensure length matches
+                if len(y) < total_samples:
+                    y = np.pad(y, (0, total_samples - len(y)), 'constant')
+                y = y / np.max(np.abs(y) + 1e-7)  # Normalize
+                y = y.astype(np.float32)  # Ensure float type
+
+                # Combine with existing data
                 combined_data += y
 
             # Voice changer feature
-            if voice_changer and voice_file is not None:
+            if voice_changer and uploaded_file is not None:
+                voice_file = uploaded_file  # Assuming the uploaded file is the voice recording
                 voice_bytes = voice_file.read()
-                # Load the voice file
-                y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
+                try:
+                    y_voice, sr_voice = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
+                except Exception as e:
+                    st.error(f"Error loading voice recording: {e}")
+                    y_voice = np.zeros(total_samples, dtype=np.float32)
+
                 # Pitch shift by specified semitones
-                y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
+                try:
+                    y_shifted = pitch_shift_audio(y_voice, sr_voice, n_steps=pitch_shift_semitones)
+                except Exception as e:
+                    st.error(f"Error applying pitch shift: {e}")
+                    y_shifted = y_voice
+
                 # Ensure length matches
-                if len(y_shifted) > total_samples:
-                    y_shifted = y_shifted[:total_samples]
-                else:
+                y_shifted = y_shifted[:total_samples]
+                if len(y_shifted) < total_samples:
                     y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
                 y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
                 y_shifted = y_shifted.astype(np.float32)  # Ensure float type
 
-                # Adjust lengths if necessary
-                if len(y_shifted) != len(combined_data):
-                    min_length = min(len(y_shifted), len(combined_data))
-                    y_shifted = y_shifted[:min_length]
-                    combined_data = combined_data[:min_length]
-
+                # Combine with existing data
                 combined_data += y_shifted
 
             # Include algorithmic composition
@@ -1663,47 +1212,47 @@ def main():
             for effect in effects_chain:
                 params = varied_effect_params.get(effect, {})
                 if effect == "Reverb":
-                    combined_data = apply_reverb(combined_data, sample_rate, decay=params['decay'])
-                    plot_data = apply_reverb(plot_data, sample_rate, decay=params['decay'])
+                    combined_data = apply_reverb(combined_data, sample_rate, decay=params.get('decay', 0.5))
+                    plot_data = apply_reverb(plot_data, sample_rate, decay=params.get('decay', 0.5))
                 elif effect == "Delay":
-                    combined_data = apply_delay(combined_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
-                    plot_data = apply_delay(plot_data, sample_rate, delay_time=params['delay_time'], feedback=params['feedback'])
+                    combined_data = apply_delay(combined_data, sample_rate, delay_time=params.get('delay_time', 0.5), feedback=params.get('feedback', 0.5))
+                    plot_data = apply_delay(plot_data, sample_rate, delay_time=params.get('delay_time', 0.5), feedback=params.get('feedback', 0.5))
                 elif effect == "Distortion":
-                    combined_data = apply_distortion(combined_data, gain=params['gain'], threshold=params['threshold'])
-                    plot_data = apply_distortion(plot_data, gain=params['gain'], threshold=params['threshold'])
+                    combined_data = apply_distortion(combined_data, gain=params.get('gain', 20), threshold=params.get('threshold', 0.5))
+                    plot_data = apply_distortion(plot_data, gain=params.get('gain', 20), threshold=params.get('threshold', 0.5))
                 elif effect == "Tremolo":
-                    combined_data = apply_tremolo(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
-                    plot_data = apply_tremolo(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    combined_data = apply_tremolo(combined_data, sample_rate, rate=params.get('rate', 5.0), depth=params.get('depth', 0.8))
+                    plot_data = apply_tremolo(plot_data, sample_rate, rate=params.get('rate', 5.0), depth=params.get('depth', 0.8))
                 elif effect == "Chorus":
-                    combined_data = apply_chorus(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
-                    plot_data = apply_chorus(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    combined_data = apply_chorus(combined_data, sample_rate, rate=params.get('rate', 1.5), depth=params.get('depth', 0.5))
+                    plot_data = apply_chorus(plot_data, sample_rate, rate=params.get('rate', 1.5), depth=params.get('depth', 0.5))
                 elif effect == "Flanger":
-                    combined_data = apply_flanger(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
-                    plot_data = apply_flanger(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    combined_data = apply_flanger(combined_data, sample_rate, rate=params.get('rate', 0.5), depth=params.get('depth', 0.7))
+                    plot_data = apply_flanger(plot_data, sample_rate, rate=params.get('rate', 0.5), depth=params.get('depth', 0.7))
                 elif effect == "Phaser":
-                    combined_data = apply_phaser(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
-                    plot_data = apply_phaser(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    combined_data = apply_phaser(combined_data, sample_rate, rate=params.get('rate', 0.5), depth=params.get('depth', 0.7))
+                    plot_data = apply_phaser(plot_data, sample_rate, rate=params.get('rate', 0.5), depth=params.get('depth', 0.7))
                 elif effect == "Compression":
-                    combined_data = apply_compression(combined_data, threshold=params['threshold'], ratio=params['ratio'])
-                    plot_data = apply_compression(plot_data, threshold=params['threshold'], ratio=params['ratio'])
+                    combined_data = apply_compression(combined_data, threshold=params.get('threshold', 0.5), ratio=params.get('ratio', 2.0))
+                    plot_data = apply_compression(plot_data, threshold=params.get('threshold', 0.5), ratio=params.get('ratio', 2.0))
                 elif effect == "EQ":
-                    combined_data = apply_eq(combined_data, sample_rate, params['bands'])
-                    plot_data = apply_eq(plot_data, sample_rate, params['bands'])
+                    combined_data = apply_eq(combined_data, sample_rate, params.get('bands', {'low':0, 'mid':0, 'high':0}))
+                    plot_data = apply_eq(plot_data, sample_rate, params.get('bands', {'low':0, 'mid':0, 'high':0}))
                 elif effect == "Pitch Shifter":
-                    combined_data = apply_pitch_shift(combined_data, sample_rate, params['semitones'])
-                    plot_data = apply_pitch_shift(plot_data, sample_rate, params['semitones'])
+                    combined_data = apply_pitch_shift(combined_data, sample_rate, semitones=params.get('semitones', 0))
+                    plot_data = apply_pitch_shift(plot_data, sample_rate, semitones=params.get('semitones', 0))
                 elif effect == "High-pass Filter":
-                    combined_data = apply_highpass_filter(combined_data, sample_rate, params['cutoff'])
-                    plot_data = apply_highpass_filter(plot_data, sample_rate, params['cutoff'])
+                    combined_data = apply_highpass_filter(combined_data, sample_rate, cutoff=params.get('cutoff', 200))
+                    plot_data = apply_highpass_filter(plot_data, sample_rate, cutoff=params.get('cutoff', 200))
                 elif effect == "Low-pass Filter":
-                    combined_data = apply_lowpass_filter(combined_data, sample_rate, params['cutoff'])
-                    plot_data = apply_lowpass_filter(plot_data, sample_rate, params['cutoff'])
+                    combined_data = apply_lowpass_filter(combined_data, sample_rate, cutoff=params.get('cutoff', 5000))
+                    plot_data = apply_lowpass_filter(plot_data, sample_rate, cutoff=params.get('cutoff', 5000))
                 elif effect == "Vibrato":
-                    combined_data = apply_vibrato(combined_data, sample_rate, rate=params['rate'], depth=params['depth'])
-                    plot_data = apply_vibrato(plot_data, sample_rate, rate=params['rate'], depth=params['depth'])
+                    combined_data = apply_vibrato(combined_data, sample_rate, rate=params.get('rate', 5.0), depth=params.get('depth', 0.5))
+                    plot_data = apply_vibrato(plot_data, sample_rate, rate=params.get('rate', 5.0), depth=params.get('depth', 0.5))
                 elif effect == "Auto-pan":
-                    combined_data = apply_autopan(combined_data, sample_rate, rate=params['rate'])
-                    plot_data = apply_autopan(plot_data, sample_rate, rate=params['rate'])
+                    combined_data = apply_autopan(combined_data, sample_rate, rate=params.get('rate', 1.0))
+                    plot_data = apply_autopan(plot_data, sample_rate, rate=params.get('rate', 1.0))
 
             # Adjust bit depth
             combined_data = adjust_bit_depth(combined_data, bit_depth)
@@ -1745,33 +1294,458 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
 
             # Create spectrogram
-            D = librosa.stft(plot_data)
-            S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
-            fig, ax = plt.subplots(figsize=(10, 4))
-            img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax)
-            fig.colorbar(img, ax=ax, format='%+2.0f dB')
-            ax.set_title('Spectrogram')
-            st.pyplot(fig)
+            try:
+                D = librosa.stft(plot_data)
+                S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+                fig, ax = plt.subplots(figsize=(10, 4))
+                img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax)
+                fig.colorbar(img, ax=ax, format='%+2.0f dB')
+                ax.set_title('Spectrogram')
+                st.pyplot(fig)
+            except Exception as e:
+                st.error(f"Error generating spectrogram: {e}")
 
             # Update progress
             progress_bar.progress((sample_num + 1) / num_samples)
 
         status_text.text("All samples generated!")
 
-    # Download all generated files as a zip
-    if st.session_state['generated_files']:
-        zip_filename = "industrial_noise_samples.zip"
-        with zipfile.ZipFile(zip_filename, 'w') as zipf:
-            for file in st.session_state['generated_files']:
-                zipf.write(file, os.path.basename(file))
-        
-        with open(zip_filename, "rb") as f:
-            btn = st.download_button(
-                label="Download All Samples",
-                data=f.read(),
-                file_name=zip_filename,
-                mime="application/zip"
-            )
+        # Download all generated files as a zip
+        if st.session_state['generated_files']:
+            zip_filename = "industrial_noise_samples.zip"
+            with zipfile.ZipFile(zip_filename, 'w') as zipf:
+                for file in st.session_state['generated_files']:
+                    zipf.write(file, os.path.basename(file))
+            
+            with open(zip_filename, "rb") as f:
+                btn = st.download_button(
+                    label="Download All Samples",
+                    data=f.read(),
+                    file_name=zip_filename,
+                    mime="application/zip"
+                )
 
+# Define all the helper functions after main()
+# Functions to generate noise
+def generate_white_noise(duration, sample_rate):
+    samples = np.random.normal(0, 1, int(duration * sample_rate))
+    return samples
+
+def generate_pink_noise(duration, sample_rate):
+    # Voss-McCartney algorithm
+    samples = int(duration * sample_rate)
+    n_rows = 16
+    n_columns = int(np.ceil(samples / n_rows))
+    array = np.random.randn(n_rows, n_columns)
+    cumulative = np.cumsum(array, axis=0)
+    pink_noise = cumulative[-1, :]
+    pink_noise = pink_noise[:samples]
+    return pink_noise
+
+def generate_brown_noise(duration, sample_rate):
+    samples = int(duration * sample_rate)
+    brown_noise = np.cumsum(np.random.randn(samples))
+    brown_noise = brown_noise / np.max(np.abs(brown_noise) + 1e-7)
+    return brown_noise
+
+def generate_blue_noise(duration, sample_rate):
+    # Differentiated white noise
+    samples = int(duration * sample_rate)
+    white = np.random.normal(0, 1, samples)
+    blue_noise = np.diff(white)
+    blue_noise = np.concatenate(([0], blue_noise))
+    return blue_noise
+
+def generate_violet_noise(duration, sample_rate):
+    # Differentiated blue noise
+    samples = int(duration * sample_rate)
+    white = np.random.normal(0, 1, samples)
+    violet_noise = np.diff(np.diff(white))
+    violet_noise = np.concatenate(([0, 0], violet_noise))
+    return violet_noise
+
+def generate_grey_noise(duration, sample_rate):
+    # Shaped white noise to match human hearing
+    samples = int(duration * sample_rate)
+    white = np.random.normal(0, 1, samples)
+    freqs = np.fft.rfftfreq(samples, 1/sample_rate)
+    a_weighting = (12200**2 * freqs**4) / ((freqs**2 + 20.6**2) * np.sqrt((freqs**2 + 107.7**2) * (freqs**2 + 737.9**2)) * (freqs**2 + 12200**2))
+    a_weighting = a_weighting / np.max(a_weighting + 1e-7)
+    white_fft = np.fft.rfft(white)
+    grey_fft = white_fft * a_weighting
+    grey_noise = np.fft.irfft(grey_fft)
+    return grey_noise
+
+# Functions to generate waveforms
+def generate_waveform(waveform_type, frequency, duration, sample_rate):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    if waveform_type == "Sine Wave":
+        waveform = np.sin(2 * np.pi * frequency * t)
+    elif waveform_type == "Square Wave":
+        waveform = signal.square(2 * np.pi * frequency * t)
+    elif waveform_type == "Sawtooth Wave":
+        waveform = signal.sawtooth(2 * np.pi * frequency * t)
+    elif waveform_type == "Triangle Wave":
+        waveform = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    else:
+        waveform = np.zeros_like(t)
+    return waveform
+
+def generate_synth_tone(note, duration, sample_rate, waveform='Sine', envelope=None):
+    frequency = note_to_freq(note)
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    if waveform == 'Sine':
+        tone = np.sin(2 * np.pi * frequency * t)
+    elif waveform == 'Square':
+        tone = signal.square(2 * np.pi * frequency * t)
+    elif waveform == 'Sawtooth':
+        tone = signal.sawtooth(2 * np.pi * frequency * t)
+    elif waveform == 'Triangle':
+        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    else:
+        tone = np.zeros_like(t)
+    if envelope:
+        tone *= envelope
+    return tone
+
+def note_to_freq(note):
+    # Convert note (e.g., 'A4') to frequency
+    A4_freq = 440.0
+    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F',
+                  'F#', 'G', 'G#', 'A', 'A#', 'B']
+    try:
+        key_number = note_names.index(note[:-1])
+        octave = int(note[-1])
+        n = key_number + (octave - 4) * 12
+        freq = A4_freq * (2 ** (n / 12))
+    except:
+        freq = A4_freq  # Default to A4 if parsing fails
+    return freq
+
+def generate_envelope(total_samples, sample_rate, attack, decay, sustain, release):
+    envelope = np.zeros(total_samples)
+    attack_samples = int(attack * sample_rate)
+    decay_samples = int(decay * sample_rate)
+    release_samples = int(release * sample_rate)
+    sustain_samples = total_samples - attack_samples - decay_samples - release_samples
+
+    # Ensure no negative values
+    sustain_samples = max(sustain_samples, 0)
+
+    # Attack
+    if attack_samples > 0:
+        envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
+    # Decay
+    if decay_samples > 0:
+        envelope[attack_samples:attack_samples+decay_samples] = np.linspace(1, sustain, decay_samples)
+    # Sustain
+    if sustain_samples > 0:
+        envelope[attack_samples+decay_samples:attack_samples+decay_samples+sustain_samples] = sustain
+    # Release
+    if release_samples > 0:
+        envelope[-release_samples:] = np.linspace(sustain, 0, release_samples)
+    return envelope
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    # Create a bandpass filter
+    nyq = 0.5 * fs
+    low = max(lowcut / nyq, 0.001)
+    high = min(highcut / nyq, 0.999)
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+def apply_filter(data, lowcut, highcut, fs, order=5):
+    # Apply the bandpass filter
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
+
+def apply_fade(data, sample_rate, fade_in, fade_out):
+    # Ensure data is at least two-dimensional
+    if data.ndim == 1:
+        data = data.reshape(-1, 1)
+
+    # Apply fade in/out
+    total_samples = data.shape[0]
+    fade_in_samples = int(fade_in * sample_rate)
+    fade_out_samples = int(fade_out * sample_rate)
+
+    # Ensure fade samples do not exceed total samples
+    fade_in_samples = min(fade_in_samples, total_samples)
+    fade_out_samples = min(fade_out_samples, total_samples)
+
+    # Apply fade-in if applicable
+    if fade_in_samples > 0:
+        fade_in_curve = np.linspace(0, 1, fade_in_samples).reshape(-1, 1)
+        data[:fade_in_samples] *= fade_in_curve
+
+    # Apply fade-out if applicable
+    if fade_out_samples > 0:
+        fade_out_curve = np.linspace(1, 0, fade_out_samples).reshape(-1, 1)
+        data[-fade_out_samples:] *= fade_out_curve
+
+    # Flatten data if original was one-dimensional
+    if data.shape[1] == 1:
+        data = data.flatten()
+
+    return data
+
+def apply_amplitude_modulation(data, sample_rate, mod_freq=5.0):
+    # Apply amplitude modulation
+    t = np.linspace(0, len(data)/sample_rate, num=len(data))
+    modulator = np.sin(2 * np.pi * mod_freq * t)
+    return data * modulator
+
+def apply_frequency_modulation(data, sample_rate, mod_freq=5.0, mod_index=2.0):
+    # Apply frequency modulation
+    t = np.linspace(0, len(data)/sample_rate, num=len(data))
+    carrier = np.sin(2 * np.pi * 440 * t + mod_index * np.sin(2 * np.pi * mod_freq * t))
+    return data * carrier
+
+def apply_reverb(data, sample_rate, decay=0.5):
+    # Simple reverb effect using feedback delay
+    reverb_data = np.copy(data)
+    delay_samples = int(0.02 * sample_rate)
+    for i in range(delay_samples, len(data)):
+        reverb_data[i] += decay * reverb_data[i - delay_samples]
+    return reverb_data
+
+def apply_delay(data, sample_rate, delay_time=0.5, feedback=0.5):
+    # Simple delay effect
+    delay_samples = int(delay_time * sample_rate)
+    delayed_data = np.zeros(len(data) + delay_samples)
+    delayed_data[:len(data)] = data
+    for i in range(len(data)):
+        if i + delay_samples < len(delayed_data):
+            delayed_data[i + delay_samples] += data[i] * feedback
+    return delayed_data[:len(data)]
+
+def apply_distortion(data, gain=20, threshold=0.5):
+    # Simple distortion effect
+    data = data * gain
+    data[data > threshold] = threshold
+    data[data < -threshold] = -threshold
+    return data
+
+def adjust_bit_depth(data, bit_depth):
+    # Adjust bit depth
+    max_val = 2 ** (bit_depth - 1) - 1
+    data = data * max_val
+    data = np.round(data)
+    data = data / max_val
+    return data
+
+def pan_stereo(data, panning):
+    # Panning for stereo sound
+    left = data * (1 - panning)
+    right = data * panning
+    stereo_data = np.vstack((left, right)).T
+    return stereo_data
+
+def generate_algorithmic_composition(duration, sample_rate, composition_type):
+    if composition_type == "Random Melody":
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        melody = np.zeros_like(t)
+        num_notes = int(duration * 2)  # 2 notes per second
+        note_durations = np.random.uniform(0.1, 0.5, size=num_notes)
+        note_frequencies = np.random.uniform(200, 800, size=num_notes)
+        current_sample = 0
+        for i in range(num_notes):
+            note_duration_samples = int(note_durations[i] * sample_rate)
+            end_sample = current_sample + note_duration_samples
+            if end_sample > len(t):
+                end_sample = len(t)
+            melody[current_sample:end_sample] = np.sin(2 * np.pi * note_frequencies[i] * t[current_sample:end_sample])
+            current_sample = end_sample
+            if current_sample >= len(t):
+                break
+        return melody
+    elif composition_type == "Ambient Soundscape":
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        soundscape = np.sin(2 * np.pi * 220 * t) * np.random.uniform(0.5, 1.0)
+        return soundscape
+    elif composition_type == "Rhythmic Pattern":
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        bpm = 120
+        beat_duration = 60 / bpm
+        num_beats = int(duration / beat_duration)
+        rhythm = np.zeros_like(t)
+        for i in range(num_beats):
+            start_sample = int(i * beat_duration * sample_rate)
+            end_sample = start_sample + int(0.1 * sample_rate)  # 100 ms per beat
+            if end_sample > len(t):
+                end_sample = len(t)
+            rhythm[start_sample:end_sample] = 1.0
+        return rhythm * np.sin(2 * np.pi * 440 * t)
+    else:
+        return np.zeros(int(duration * sample_rate))
+
+def pitch_shift_audio(data, sample_rate, n_steps):
+    # Pitch shift using librosa
+    return librosa.effects.pitch_shift(data, sample_rate, n_steps=n_steps)
+
+def apply_tremolo(data, sample_rate, rate=5.0, depth=0.8):
+    # Tremolo effect
+    t = np.arange(len(data)) / sample_rate
+    tremolo = (1 + depth * np.sin(2 * np.pi * rate * t)) / 2
+    return data * tremolo
+
+def apply_bitcrusher(data, bit_depth):
+    # Bitcrusher effect
+    max_val = 2 ** (bit_depth - 1) - 1
+    data = data * max_val
+    data = np.round(data)
+    data = data / max_val
+    return data
+
+def apply_sample_reduction(data, reduction_factor):
+    # Sample rate reduction
+    reduced_data = data[::reduction_factor]
+    upsampled_data = np.repeat(reduced_data, reduction_factor)
+    upsampled_data = upsampled_data[:len(data)]  # Ensure the length matches
+    return upsampled_data
+
+def apply_reverse(data):
+    # Reverse audio
+    return data[::-1]
+
+def apply_stutter(data, sample_rate, interval=0.1):
+    # Stutter effect
+    stutter_samples = int(interval * sample_rate)
+    num_repeats = 3
+    stuttered_data = []
+    for i in range(0, len(data), stutter_samples):
+        chunk = data[i:i+stutter_samples]
+        for _ in range(num_repeats):
+            stuttered_data.append(chunk)
+    stuttered_data = np.concatenate(stuttered_data)
+    return stuttered_data[:len(data)]
+
+def apply_glitch(data, sample_rate):
+    # Glitch effect
+    glitch_length = int(0.05 * sample_rate)
+    glitch_data = np.copy(data)
+    for i in range(0, len(data), glitch_length * 4):
+        glitch_data[i:i+glitch_length] = 0
+    return glitch_data
+
+def apply_arpeggiation(data, sample_rate, pattern='Ascending'):
+    # Arpeggiation effect
+    num_notes = 4
+    note_length = int(len(data) / num_notes)
+    arpeggiated_data = np.zeros_like(data)
+    indices = list(range(num_notes))
+    if pattern == 'Ascending':
+        pass  # Indices already in ascending order
+    elif pattern == 'Descending':
+        indices = indices[::-1]
+    elif pattern == 'Random':
+        random.shuffle(indices)
+    for idx, i in enumerate(indices):
+        start = i * note_length
+        end = start + note_length
+        arpeggiated_data[start:end] = data[start:end]
+    return arpeggiated_data
+
+def apply_sequencer(data, sample_rate, pattern='Random'):
+    # Sequencer effect
+    sequence_length = int(sample_rate * 0.5)  # 0.5 seconds per sequence
+    num_sequences = len(data) // sequence_length
+    sequences = [data[i*sequence_length:(i+1)*sequence_length] for i in range(num_sequences)]
+    if pattern == 'Ascending':
+        pass
+    elif pattern == 'Descending':
+        sequences = sequences[::-1]
+    elif pattern == 'Random':
+        random.shuffle(sequences)
+    sequenced_data = np.concatenate(sequences)
+    return sequenced_data[:len(data)]
+
+def apply_chorus(data, sample_rate, rate=1.5, depth=0.5):
+    # Simple chorus effect
+    delay_samples = int((1 / rate) * sample_rate)
+    modulated_delay = depth * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
+    flanged_data = np.zeros_like(data)
+    for i in range(len(data)):
+        delay = int(modulated_delay[i])
+        if i - delay >= 0:
+            flanged_data[i] = data[i] + data[i - delay]
+    return flanged_data
+
+def apply_flanger(data, sample_rate, rate=0.5, depth=0.7):
+    # Simple flanger effect
+    delay_samples = int(0.001 * sample_rate)  # 1 ms delay
+    modulated_delay = depth * delay_samples * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
+    flanged_data = np.zeros_like(data)
+    for i in range(len(data)):
+        delay = int(modulated_delay[i])
+        if i - delay >= 0:
+            flanged_data[i] = data[i] + data[i - delay]
+        else:
+            flanged_data[i] = data[i]
+    return flanged_data
+
+def apply_phaser(data, sample_rate, rate=0.5, depth=0.7):
+    # Simple phaser effect
+    phaser_data = np.copy(data)
+    phase = depth * np.sin(2 * np.pi * rate * np.arange(len(data)) / sample_rate)
+    phaser_data = np.sin(2 * np.pi * phaser_data + phase)
+    return phaser_data
+
+def apply_compression(data, threshold=0.5, ratio=2.0):
+    # Simple compression effect
+    compressed_data = np.copy(data)
+    over_threshold = np.abs(compressed_data) > threshold
+    compressed_data[over_threshold] = threshold + (compressed_data[over_threshold] - threshold) / ratio
+    compressed_data[compressed_data < -threshold] = -threshold + (compressed_data[compressed_data < -threshold] + threshold) / ratio
+    return compressed_data
+
+def apply_eq(data, sample_rate, bands):
+    # Simple 3-band EQ
+    eq_data = np.copy(data)
+    # Low frequencies (20 Hz - 250 Hz)
+    b, a = butter(2, [20 / (0.5 * sample_rate), 250 / (0.5 * sample_rate)], btype='band')
+    low = lfilter(b, a, data) * (10 ** (bands.get('low', 0) / 20))
+    # Mid frequencies (250 Hz - 4 kHz)
+    b, a = butter(2, [250 / (0.5 * sample_rate), 4000 / (0.5 * sample_rate)], btype='band')
+    mid = lfilter(b, a, data) * (10 ** (bands.get('mid', 0) / 20))
+    # High frequencies (4 kHz - 20 kHz)
+    b, a = butter(2, [4000 / (0.5 * sample_rate), 20000 / (0.5 * sample_rate)], btype='band')
+    high = lfilter(b, a, data) * (10 ** (bands.get('high', 0) / 20))
+    eq_data = low + mid + high
+    return eq_data
+
+def apply_pitch_shift(data, sample_rate, semitones):
+    # Pitch shifting using librosa
+    return librosa.effects.pitch_shift(data, sample_rate, n_steps=semitones)
+
+def apply_highpass_filter(data, sample_rate, cutoff):
+    # High-pass filter
+    b, a = butter(2, cutoff / (0.5 * sample_rate), btype='high')
+    return lfilter(b, a, data)
+
+def apply_lowpass_filter(data, sample_rate, cutoff):
+    # Low-pass filter
+    b, a = butter(2, cutoff / (0.5 * sample_rate), btype='low')
+    return lfilter(b, a, data)
+
+def apply_vibrato(data, sample_rate, rate=5.0, depth=0.5):
+    # Vibrato effect
+    t = np.arange(len(data))
+    vibrato = np.sin(2 * np.pi * rate * t / sample_rate)
+    indices = t + depth * vibrato * sample_rate
+    indices = np.clip(indices, 0, len(data) - 1).astype(int)
+    return data[indices]
+
+def apply_autopan(data, sample_rate, rate=1.0):
+    # Auto-pan effect
+    t = np.arange(len(data)) / sample_rate
+    pan = 0.5 * (1 + np.sin(2 * np.pi * rate * t))
+    left = data * pan
+    right = data * (1 - pan)
+    stereo_data = np.vstack((left, right)).T
+    return stereo_data
+
+# Run the main function
 if __name__ == "__main__":
     main()
