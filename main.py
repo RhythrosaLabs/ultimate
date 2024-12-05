@@ -11,6 +11,7 @@ import librosa.display
 import random
 import soundfile as sf
 import warnings
+import wave  # Added import for wave module
 warnings.filterwarnings('ignore')
 
 import os
@@ -441,6 +442,23 @@ def list_presets():
     else:
         return []
 
+# Additional function to generate synth tone from frequency
+def generate_synth_tone_from_freq(frequency, duration, sample_rate, waveform='Sine', envelope=None):
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    if waveform == 'Sine':
+        tone = np.sin(2 * np.pi * frequency * t)
+    elif waveform == 'Square':
+        tone = signal.square(2 * np.pi * frequency * t)
+    elif waveform == 'Sawtooth':
+        tone = signal.sawtooth(2 * np.pi * frequency * t)
+    elif waveform == 'Triangle':
+        tone = signal.sawtooth(2 * np.pi * frequency * t, width=0.5)
+    else:
+        tone = np.zeros_like(t)
+    if envelope is not None:
+        tone *= envelope
+    return tone
+
 # ------------------------ Main Application ------------------------
 
 def main():
@@ -515,9 +533,9 @@ def main():
     st.markdown("""
     Welcome to the **Industrial Noise Generator and Audio Recorder** app! This application offers two main functionalities:
 
-    - **Industrial Noise Generator Pro Max with Variations:** Generate multiple industrial noise samples with advanced features including signal flow customization, BPM control, synthesizer options, and more.
+    - **Industrial Noise Generator Pro Max with Variations:** Generate multiple industrial noise samples with advanced customization options.
     
-    - **Audio Recorder and Playback:** Record your own audio, apply various effects, analyze, and save your recordings.
+    - **Audio Recorder and Playback:** Upload, apply effects, analyze, and save your audio recordings.
 
     Use the tabs below to navigate between the two features.
     """)
@@ -1517,36 +1535,40 @@ def main():
                 # Include uploaded audio file
                 if uploaded_file is not None:
                     audio_bytes = uploaded_file.read()
-                    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
-                    y = y[:total_samples]
-                    y = y / np.max(np.abs(y) + 1e-7)
-                    y = y.astype(np.float32)
-
-                    if len(y) != len(combined_data):
-                        min_length = min(len(y), len(combined_data))
-                        y = y[:min_length]
-                        combined_data = combined_data[:min_length]
-
-                    combined_data += y
+                    try:
+                        y, sr = librosa.load(io.BytesIO(audio_bytes), sr=sample_rate, mono=True, duration=duration)
+                        y = y[:total_samples]
+                        y = y / np.max(np.abs(y) + 1e-7)
+                        y = y.astype(np.float32)
+                        if len(y) != len(combined_data):
+                            min_length = min(len(y), len(combined_data))
+                            y = y[:min_length]
+                            combined_data = combined_data[:min_length]
+                        combined_data += y
+                    except Exception as e:
+                        st.error(f"❌ Error loading uploaded audio: {e}")
 
                 # Voice changer feature
                 if voice_changer and voice_file is not None:
                     voice_bytes = voice_file.read()
-                    y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
-                    y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
-                    if len(y_shifted) > total_samples:
-                        y_shifted = y_shifted[:total_samples]
-                    else:
-                        y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
-                    y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
-                    y_shifted = y_shifted.astype(np.float32)
+                    try:
+                        y, sr = librosa.load(io.BytesIO(voice_bytes), sr=sample_rate, mono=True)
+                        y_shifted = pitch_shift_audio(y, sr, n_steps=pitch_shift_semitones)
+                        if len(y_shifted) > total_samples:
+                            y_shifted = y_shifted[:total_samples]
+                        else:
+                            y_shifted = np.pad(y_shifted, (0, total_samples - len(y_shifted)), 'constant')
+                        y_shifted = y_shifted / np.max(np.abs(y_shifted) + 1e-7)
+                        y_shifted = y_shifted.astype(np.float32)
 
-                    if len(y_shifted) != len(combined_data):
-                        min_length = min(len(y_shifted), len(combined_data))
-                        y_shifted = y_shifted[:min_length]
-                        combined_data = combined_data[:min_length]
+                        if len(y_shifted) != len(combined_data):
+                            min_length = min(len(y_shifted), len(combined_data))
+                            y_shifted = y_shifted[:min_length]
+                            combined_data = combined_data[:min_length]
 
-                    combined_data += y_shifted
+                        combined_data += y_shifted
+                    except Exception as e:
+                        st.error(f"❌ Error applying voice changer: {e}")
 
                 # Include algorithmic composition
                 if algorithmic_composition and composition_type is not None:
@@ -1703,13 +1725,16 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
                 # Create spectrogram
-                D = librosa.stft(plot_data)
-                S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
-                fig, ax = plt.subplots(figsize=(10, 4))
-                img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax)
-                fig.colorbar(img, ax=ax, format='%+2.0f dB')
-                ax.set_title('Spectrogram')
-                st.pyplot(fig)
+                try:
+                    D = librosa.stft(plot_data)
+                    S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+                    fig, ax = plt.subplots(figsize=(10, 4))
+                    img = librosa.display.specshow(S_db, x_axis='time', y_axis='hz', ax=ax)
+                    fig.colorbar(img, ax=ax, format='%+2.0f dB')
+                    ax.set_title('Spectrogram')
+                    st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"❌ Error generating spectrogram: {e}")
 
                 # Update progress
                 progress_bar.progress((sample_num + 1) / num_samples)
@@ -1740,86 +1765,140 @@ def main():
         html_description = """
         <div style="background-color:#f5f5f7;padding:20px;border-radius:20px;box-shadow:0 4px 8px rgba(0, 0, 0, 0.1);">
             <h1 style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#1d1d1f;">Welcome to the Audio Recorder</h1>
-            <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;">Record, analyze, and enhance your audio with a simple, intuitive interface.</p>
+            <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;">Upload, analyze, and enhance your audio with a simple, intuitive interface.</p>
         </div>
         """
         html(html_description, height=180)
 
-        # Step 1: Record Audio
-        st.write("### Step 1: Record your audio")
-        audio_data = st.audio_input("Please record your message:")
+        # Step 1: Upload Audio
+        st.write("### Step 1: Upload your audio")
+        audio_file = st.file_uploader("Please upload your audio file:", type=["wav", "mp3"])
 
-        # Step 2: Playback and Monitoring
-        if audio_data:
-            st.write("### Step 2: Play back your recording")
-            st.audio(audio_data, format='audio/wav')
-
-            monitoring = st.checkbox("Enable Input Monitoring", help="Listen to your input while recording")
-            if monitoring:
-                st.audio(audio_data, format='audio/wav')
-
-            # Step 3: Save Audio
-            st.write("### Step 3: Save or analyze your recording")
-            save_option = st.button("Save Recording")
-            if save_option:
-                with open("recorded_audio.wav", "wb") as f:
-                    f.write(audio_data.getbuffer())
-                st.success("✅ Audio recording saved as 'recorded_audio.wav'")
-
-            # Step 4: Analyze Audio
-            analyze_button = st.button("Analyze Recording")
-            if analyze_button:
-                with open("temp_audio.wav", "wb") as f:
-                    f.write(audio_data.getbuffer())
+        if audio_file is not None:
+            try:
+                # Load the uploaded file
+                with wave.open(audio_file, 'rb') as wav_file:
+                    sample_rate = wav_file.getframerate()
+                    n_channels = wav_file.getnchannels()
+                    sampwidth = wav_file.getsampwidth()
+                    n_frames = wav_file.getnframes()
+                    audio_signal = wav_file.readframes(n_frames)
+                    audio_signal = np.frombuffer(audio_signal, dtype=np.int16)
+                    if n_channels > 1:
+                        audio_signal = audio_signal.reshape(-1, n_channels)
+                        audio_signal = audio_signal.mean(axis=1)  # Convert to mono by averaging channels
+                    audio_signal = audio_signal.astype(np.float32)
+                    audio_signal /= np.max(np.abs(audio_signal) + 1e-7)  # Normalize
+            except wave.Error:
+                # If the file is not a WAV file, try loading with librosa
                 try:
-                    with wave.open("temp_audio.wav", "rb") as wav_file:
-                        frames = wav_file.readframes(-1)
-                        frame_rate = wav_file.getframerate()
-                        n_channels = wav_file.getnchannels()
-                        sample_width = wav_file.getsampwidth()
-                        n_frames = wav_file.getnframes()
+                    audio_signal, sample_rate = librosa.load(audio_file, sr=None, mono=True)
+                    audio_signal = audio_signal.astype(np.float32)
+                    audio_signal /= np.max(np.abs(audio_signal) + 1e-7)  # Normalize
+                except Exception as e:
+                    st.error(f"❌ Error loading audio file: {e}")
+                    audio_signal = None
+                    sample_rate = None
 
+            if audio_signal is not None:
+                # Step 2: Playback and Monitoring
+                st.write("### Step 2: Play back your recording")
+                st.audio(audio_file, format='audio/wav')
+
+                # Step 3: Save Audio
+                st.write("### Step 3: Save or analyze your recording")
+                save_option = st.button("Save Recording")
+                if save_option:
+                    with open("recorded_audio.wav", "wb") as f:
+                        f.write(audio_file.read())
+                    st.success("✅ Audio recording saved as 'recorded_audio.wav'")
+
+                # Step 4: Analyze Audio
+                analyze_button = st.button("Analyze Recording")
+                if analyze_button:
+                    try:
+                        duration = len(audio_signal) / sample_rate
                         st.write("#### Audio Analysis")
-                        st.write(f"- **Duration:** {n_frames / frame_rate:.2f} seconds")
-                        st.write(f"- **Sample Rate:** {frame_rate} Hz")
-                        st.write(f"- **Channels:** {n_channels}")
-                        st.write(f"- **Sample Width:** {sample_width} bytes")
+                        st.write(f"- **Duration:** {duration:.2f} seconds")
+                        st.write(f"- **Sample Rate:** {sample_rate} Hz")
+                        st.write(f"- **Channels:** {'Stereo' if n_channels > 1 else 'Mono'}")
+                        st.write(f"- **Sample Width:** {sampwidth} bytes" if 'sampwidth' in locals() else "- **Sample Width:** N/A")
 
                         # Visualization
-                        audio_signal = np.frombuffer(frames, dtype=np.int16)
-                        st.line_chart(audio_signal[:min(1000, len(audio_signal))])
+                        st.write("#### Waveform")
+                        fig_wave, ax_wave = plt.subplots(figsize=(10, 2))
+                        ax_wave.plot(audio_signal, color='cyan')
+                        ax_wave.set_title('Waveform')
+                        ax_wave.set_xlabel('Sample')
+                        ax_wave.set_ylabel('Amplitude')
+                        ax_wave.set_facecolor('#1a1a1a')
+                        ax_wave.tick_params(colors='white')
+                        fig_wave.patch.set_facecolor('#1a1a1a')
+                        st.pyplot(fig_wave)
 
-                except Exception as e:
-                    st.error(f"❌ Error analyzing audio: {e}")
+                        # Spectrogram
+                        st.write("#### Spectrogram")
+                        fig_spec, ax_spec = plt.subplots(figsize=(10, 4))
+                        S = librosa.stft(audio_signal)
+                        S_db = librosa.amplitude_to_db(np.abs(S), ref=np.max)
+                        librosa.display.specshow(S_db, sr=sample_rate, x_axis='time', y_axis='hz', ax=ax_spec, cmap='magma')
+                        ax_spec.set_title('Spectrogram')
+                        ax_spec.set_facecolor('#1a1a1a')
+                        ax_spec.tick_params(colors='white')
+                        fig_spec.colorbar(img:=librosa.display.specshow(S_db, sr=sample_rate, x_axis='time', y_axis='hz', ax=ax_spec, cmap='magma'), ax=ax_spec, format="%+2.0f dB")
+                        fig_spec.patch.set_facecolor('#1a1a1a')
+                        st.pyplot(fig_spec)
+                    except Exception as e:
+                        st.error(f"❌ Error analyzing audio: {e}")
 
-            # Step 5: Apply Effects
-            st.write("### Step 4: Apply effects to your recording")
-            effect_option = st.selectbox(
-                "Choose an effect to apply:",
-                ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"],
-                help="Select an audio effect to enhance your recording."
-            )
-            if effect_option != "None":
-                with open("temp_audio.wav", "wb") as f:
-                    f.write(audio_data.getbuffer())
-                with wave.open("temp_audio.wav", "rb") as wav_file:
-                    frames = wav_file.readframes(-1)
-                    frame_rate = wav_file.getframerate()
-                    audio_signal = np.frombuffer(frames, dtype=np.int16)
-                    processed_signal = apply_effect(effect_option, audio_signal, frame_rate)
+                # Step 5: Apply Effects
+                st.write("### Step 4: Apply effects to your recording")
+                effect_option = st.selectbox(
+                    "Choose an effect to apply:",
+                    ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"],
+                    help="Select an audio effect to enhance your recording."
+                )
+                if effect_option != "None":
+                    try:
+                        processed_signal = apply_effect(effect_option, audio_signal, sample_rate)
 
-                    st.write(f"### Effect Applied: {effect_option}")
-                    st.line_chart(processed_signal[:min(1000, len(processed_signal))])
+                        st.write(f"### Effect Applied: {effect_option}")
+                        st.write("#### Processed Waveform")
+                        fig_proc_wave, ax_proc_wave = plt.subplots(figsize=(10, 2))
+                        ax_proc_wave.plot(processed_signal, color='orange')
+                        ax_proc_wave.set_title('Processed Waveform')
+                        ax_proc_wave.set_xlabel('Sample')
+                        ax_proc_wave.set_ylabel('Amplitude')
+                        ax_proc_wave.set_facecolor('#1a1a1a')
+                        ax_proc_wave.tick_params(colors='white')
+                        fig_proc_wave.patch.set_facecolor('#1a1a1a')
+                        st.pyplot(fig_proc_wave)
 
-                    # Save processed audio
-                    if st.button("Save Processed Audio"):
-                        with wave.open("processed_audio.wav", "wb") as processed_file:
-                            processed_file.setnchannels(1)
-                            processed_file.setsampwidth(2)  # Assuming 16-bit audio
-                            processed_file.setframerate(frame_rate)
-                            processed_file.writeframes(processed_signal.astype(np.int16).tobytes())
-                        st.success("✅ Processed audio saved as 'processed_audio.wav'")
+                        st.write("#### Processed Spectrogram")
+                        fig_proc_spec, ax_proc_spec = plt.subplots(figsize=(10, 4))
+                        S_proc = librosa.stft(processed_signal)
+                        S_proc_db = librosa.amplitude_to_db(np.abs(S_proc), ref=np.max)
+                        librosa.display.specshow(S_proc_db, sr=sample_rate, x_axis='time', y_axis='hz', ax=ax_proc_spec, cmap='magma')
+                        ax_proc_spec.set_title('Processed Spectrogram')
+                        ax_proc_spec.set_facecolor('#1a1a1a')
+                        ax_proc_spec.tick_params(colors='white')
+                        fig_proc_spec.colorbar(img:=librosa.display.specshow(S_proc_db, sr=sample_rate, x_axis='time', y_axis='hz', ax=ax_proc_spec, cmap='magma'), ax=ax_proc_spec, format="%+2.0f dB")
+                        fig_proc_spec.patch.set_facecolor('#1a1a1a')
+                        st.pyplot(fig_proc_spec)
 
-# Run the application
-if __name__ == "__main__":
-    main()
+                        # Save processed audio
+                        if st.button("Save Processed Audio"):
+                            # Convert to int16
+                            processed_int16 = np.int16(processed_signal / np.max(np.abs(processed_signal)) * 32767)
+                            with wave.open("processed_audio.wav", "wb") as processed_file:
+                                processed_file.setnchannels(1)
+                                processed_file.setsampwidth(2)  # 16-bit
+                                processed_file.setframerate(sample_rate)
+                                processed_file.writeframes(processed_int16.tobytes())
+                            st.success("✅ Processed audio saved as 'processed_audio.wav'")
+                    except Exception as e:
+                        st.error(f"❌ Error applying effect: {e}")
+
+    # Run the application
+    if __name__ == "__main__":
+        main()
