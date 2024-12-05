@@ -42,37 +42,38 @@ st.title("🎙️ Audio Recorder and Playback")
 html_description = """
 <div style="background-color:#f5f5f7;padding:20px;border-radius:20px;box-shadow:0 4px 8px rgba(0, 0, 0, 0.1);">
     <h1 style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#1d1d1f;">Welcome to the Audio Recorder</h1>
-    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;">Seamlessly record, analyze, and save your audio files with a sleek, modern interface.</p>
+    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;">Record, analyze, and enhance your audio with a simple, intuitive interface.</p>
 </div>
 """
 html(html_description, height=180)
 
-# Display the audio input widget
+# Sidebar description
+st.sidebar.title("🎛️ Audio Processing Tools")
+st.sidebar.write("Enhance your audio with effects and customizations.")
+
+# Step 1: Record Audio
 st.write("### Step 1: Record your audio")
 audio_data = st.audio_input("Please record your message:")
 
-# Input monitoring toggle
-monitoring = st.checkbox("Enable Input Monitoring")
-
-if monitoring and audio_data:
-    st.audio(audio_data, format='audio/wav')
-
-# If audio is recorded, process further
+# Step 2: Playback and Monitoring
 if audio_data:
     st.write("### Step 2: Play back your recording")
     st.audio(audio_data, format='audio/wav')
 
-    # Save option
-    st.write("### Step 3: Save, analyze, or add effects to your recording")
-    save_option = st.checkbox("Save this recording")
+    monitoring = st.checkbox("Enable Input Monitoring", help="Listen to your input while recording")
+    if monitoring:
+        st.audio(audio_data, format='audio/wav')
+
+    # Step 3: Save Audio
+    st.write("### Step 3: Save or analyze your recording")
+    save_option = st.button("Save Recording")
     if save_option:
         with open("recorded_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
         st.success("✅ Audio recording saved as 'recorded_audio.wav'")
 
-    # Analyze option
-    analyze_option = st.checkbox("Analyze this recording")
-    if analyze_option:
+    # Step 4: Analyze Audio
+    if st.button("Analyze Recording"):
         with open("temp_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
         try:
@@ -83,27 +84,26 @@ if audio_data:
                 sample_width = wav_file.getsampwidth()
                 n_frames = wav_file.getnframes()
 
-                analysis_html = f"""
-                <div style="background-color:#ffffff;padding:20px;border-radius:15px;box-shadow:0 4px 8px rgba(0, 0, 0, 0.1);">
-                    <h2 style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#1d1d1f;">Audio Analysis</h2>
-                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Duration:</strong> {n_frames / frame_rate:.2f} seconds</p>
-                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Sample Rate:</strong> {frame_rate} Hz</p>
-                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Channels:</strong> {n_channels}</p>
-                    <p style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#6e6e73;font-size:16px;"><strong>Sample Width:</strong> {sample_width} bytes</p>
-                </div>
-                """
-                html(analysis_html, height=250)
+                st.write("#### Audio Analysis")
+                st.write(f"- **Duration:** {n_frames / frame_rate:.2f} seconds")
+                st.write(f"- **Sample Rate:** {frame_rate} Hz")
+                st.write(f"- **Channels:** {n_channels}")
+                st.write(f"- **Sample Width:** {sample_width} bytes")
 
-                # Compute amplitude (for visualization purposes)
+                # Visualization
                 audio_signal = np.frombuffer(frames, dtype=np.int16)
                 st.line_chart(audio_signal[:min(1000, len(audio_signal))])
 
         except Exception as e:
             st.error(f"❌ Error analyzing audio: {e}")
 
-    # Add effects in sidebar
-    st.sidebar.write("### Apply effects to your recording")
-    effect_option = st.sidebar.selectbox("Choose an effect to apply:", ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"])
+    # Step 5: Apply Effects
+    st.write("### Step 4: Apply effects to your recording")
+    effect_option = st.sidebar.selectbox(
+        "Choose an effect to apply:",
+        ["None", "Low Pass Filter", "High Pass Filter", "Amplify", "Echo", "Reverb", "Distortion", "FFT Filter", "Envelope Modulation"],
+        help="Select an audio effect to enhance your recording."
+    )
     if effect_option != "None":
         with open("temp_audio.wav", "wb") as f:
             f.write(audio_data.getbuffer())
@@ -116,9 +116,8 @@ if audio_data:
             st.write(f"### Effect Applied: {effect_option}")
             st.line_chart(processed_signal[:min(1000, len(processed_signal))])
 
-            # Allow users to save the processed audio
-            save_effect_option = st.sidebar.checkbox("Save processed audio")
-            if save_effect_option:
+            # Save processed audio
+            if st.sidebar.button("Save Processed Audio"):
                 with wave.open("processed_audio.wav", "wb") as processed_file:
                     processed_file.setnchannels(1)
                     processed_file.setsampwidth(2)  # Assuming 16-bit audio
