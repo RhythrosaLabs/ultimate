@@ -52,29 +52,33 @@ else:
                     st.write("**You said:**")
                     st.write(transcription)
 
-                    # Generate a rhyming response using GPT
+                    # Generate a rhyming response using GPT Chat API
                     with st.spinner("Let me rhyme..."):
                         headers = {
                             "Authorization": f"Bearer {api_key}",
                             "Content-Type": "application/json",
                         }
-                        prompt = (
-                            f"You are a poet bot. The user said: '{transcription}'. "
-                            f"Respond with a single line that rhymes with it and fits the theme."
-                        )
-                        data = {
+                        chat_data = {
                             "model": "gpt-4",
-                            "prompt": prompt,
+                            "messages": [
+                                {
+                                    "role": "system",
+                                    "content": "You are a poet bot. Respond with a single line that rhymes with the user's input and fits its theme.",
+                                },
+                                {
+                                    "role": "user",
+                                    "content": transcription,
+                                },
+                            ],
                             "temperature": 0.8,
-                            "max_tokens": 50,
                         }
                         response = requests.post(
-                            "https://api.openai.com/v1/completions",
+                            "https://api.openai.com/v1/chat/completions",
                             headers=headers,
-                            json=data,
+                            json=chat_data,
                         )
                         if response.status_code == 200:
-                            rhyming_line = response.json()["choices"][0]["text"].strip()
+                            rhyming_line = response.json()["choices"][0]["message"]["content"].strip()
                             st.write("**Rhyme Bot says:**")
                             st.write(rhyming_line)
                         else:
