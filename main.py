@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import tempfile
+from transformers import pipeline
+from langdetect import detect
 
 # App title
 st.title("Rhyme Bot: Speak, and I'll Rhyme!")
@@ -15,6 +17,20 @@ api_key = st.text_input(
 if not api_key:
     st.warning("Please enter your OpenAI API key to proceed.")
 else:
+    # Personality Selector
+    personality = st.radio(
+        "Choose a personality for Rhyme Bot:",
+        ("Shakespearean Poet", "Modern Rapper", "Playful Jokester")
+    )
+
+    persona_prompts = {
+        "Shakespearean Poet": "Respond with a rhyming couplet in the style of Shakespeare.",
+        "Modern Rapper": "Drop a rap line with a rhyme and rhythm based on the user's input.",
+        "Playful Jokester": "Respond with a rhyming line that's humorous and playful."
+    }
+
+    system_prompt = persona_prompts[personality]
+
     # Record audio using Streamlit's audio_input widget
     audio_file = st.audio_input("Say something, and I'll rhyme!")
 
@@ -52,6 +68,24 @@ else:
                     st.write("**You said:**")
                     st.write(transcription)
 
+                    # Language Detection
+                    language = detect(transcription)
+                    if language != "en":
+                        system_prompt = f"Respond with a rhyme in {language}."
+
+                    # Sentiment Analysis
+                    sentiment_analyzer = pipeline("sentiment-analysis")
+                    sentiment = sentiment_analyzer(transcription)[0]["label"]
+
+                    if sentiment == "NEGATIVE":
+                        tone = "uplifting and encouraging"
+                    elif sentiment == "POSITIVE":
+                        tone = "joyful and celebratory"
+                    else:
+                        tone = "neutral and calm"
+
+                    system_prompt += f" Respond in a tone that is {tone}."
+
                     # Generate a rhyming response using GPT Chat API
                     with st.spinner("Let me rhyme..."):
                         headers = {
@@ -63,7 +97,7 @@ else:
                             "messages": [
                                 {
                                     "role": "system",
-                                    "content": "You are a poet bot. Respond with a single line that rhymes with the user's input and fits its theme.",
+                                    "content": system_prompt,
                                 },
                                 {
                                     "role": "user",
