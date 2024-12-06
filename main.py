@@ -22,7 +22,7 @@ if not api_key:
     st.warning("Please enter your OpenAI API key to proceed.")
 else:
     # Record audio using Streamlit's audio_input widget
-    audio_file = st.file_uploader("Upload or record your voice", type=["wav", "mp3"])
+    audio_file = st.audio_input("Record your voice")
 
     if audio_file:
         # Display the recorded/uploaded audio for playback
