@@ -55,42 +55,46 @@ else:
 
                 if response.status_code == 200:
                     transcript = response.json()
-                    words = transcript["segments"]
 
-                    # Load the audio file into pydub for slicing
-                    audio = AudioSegment.from_file(temp_audio_path)
-                    word_slices = []
+                    if "segments" in transcript:
+                        words = transcript["segments"]
 
-                    # Slice the audio based on word timestamps
-                    for segment in words:
-                        start_ms = int(segment["start"] * 1000)
-                        end_ms = int(segment["end"] * 1000)
-                        word_audio = audio[start_ms:end_ms]
-                        word_slices.append(word_audio)
+                        # Load the audio file into pydub for slicing
+                        audio = AudioSegment.from_file(temp_audio_path)
+                        word_slices = []
 
-                    # Create a beat loop using samples
-                    beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
-                    for i in range(16):  # Add 16 samples
-                        sample = choice(word_slices)
-                        start_time = int((i / 16) * 4000)
-                        beat_loop = beat_loop.overlay(sample, position=start_time)
+                        # Slice the audio based on word timestamps
+                        for segment in words:
+                            start_ms = int(segment["start"] * 1000)
+                            end_ms = int(segment["end"] * 1000)
+                            word_audio = audio[start_ms:end_ms]
+                            word_slices.append(word_audio)
 
-                    # Export the generated beat loop
-                    beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                    beat_loop.export(beat_path, format="wav")
+                        # Create a beat loop using samples
+                        beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
+                        for i in range(16):  # Add 16 samples
+                            sample = choice(word_slices)
+                            start_time = int((i / 16) * 4000)
+                            beat_loop = beat_loop.overlay(sample, position=start_time)
 
-                    # Display results
-                    st.success("Transcription and beat slicing completed!")
-                    st.write("**Generated Beat Loop:**")
-                    st.audio(beat_path, format="audio/wav")
+                        # Export the generated beat loop
+                        beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+                        beat_loop.export(beat_path, format="wav")
 
-                    # Provide a download option for the beat loop
-                    st.download_button(
-                        label="Download Beat Loop",
-                        data=open(beat_path, "rb").read(),
-                        file_name="beat_loop.wav",
-                        mime="audio/wav",
-                    )
+                        # Display results
+                        st.success("Transcription and beat slicing completed!")
+                        st.write("**Generated Beat Loop:**")
+                        st.audio(beat_path, format="audio/wav")
+
+                        # Provide a download option for the beat loop
+                        st.download_button(
+                            label="Download Beat Loop",
+                            data=open(beat_path, "rb").read(),
+                            file_name="beat_loop.wav",
+                            mime="audio/wav",
+                        )
+                    else:
+                        st.error("The transcription response did not contain segments. Please try again with a clearer audio file.")
                 else:
                     st.error(
                         f"Failed to transcribe audio: {response.status_code} {response.text}"
