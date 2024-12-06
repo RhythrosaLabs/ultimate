@@ -76,35 +76,50 @@ else:
                             word_audio = audio[start_ms:end_ms]
                             word_slices.append(word_audio)
 
-                        # Create a beat loop using samples
-                        beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
-                        for i in range(16):  # Add 16 samples
-                            sample = choice(word_slices)
-                            start_time = int((i / 16) * 4000)
-                            beat_loop = beat_loop.overlay(sample, position=start_time)
-
-                        # Export the generated beat loop
-                        beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                        beat_loop.export(beat_path, format="wav")
-
-                        # Display results
-                        st.success("Transcription and beat slicing completed!")
-                        st.write("**Generated Beat Loop:**")
-                        st.audio(beat_path, format="audio/wav")
-
-                        # Provide a download option for the beat loop
-                        st.download_button(
-                            label="Download Beat Loop",
-                            data=open(beat_path, "rb").read(),
-                            file_name="beat_loop.wav",
-                            mime="audio/wav",
-                        )
                     elif "text" in transcript:
-                        st.warning("Word-level timestamps are missing. Displaying full transcription instead.")
-                        st.write("**Transcription:**")
-                        st.write(transcript["text"])
+                        st.warning("Word-level timestamps are missing. Estimating word positions.")
+
+                        # Estimate word durations
+                        words = transcript["text"].split()
+                        num_words = len(words)
+                        total_duration = len(audio)
+                        word_duration = total_duration // num_words
+
+                        # Slice the audio into estimated word chunks
+                        word_slices = []
+                        for i, word in enumerate(words):
+                            start_ms = i * word_duration
+                            end_ms = start_ms + word_duration
+                            word_audio = audio[start_ms:end_ms]
+                            word_slices.append(word_audio)
+
                     else:
                         st.error("The transcription response did not contain segments or text. Please try again.")
+                        return
+
+                    # Create a beat loop using samples
+                    beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
+                    for i in range(16):  # Add 16 samples
+                        sample = choice(word_slices)
+                        start_time = int((i / 16) * 4000)
+                        beat_loop = beat_loop.overlay(sample, position=start_time)
+
+                    # Export the generated beat loop
+                    beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+                    beat_loop.export(beat_path, format="wav")
+
+                    # Display results
+                    st.success("Transcription and beat slicing completed!")
+                    st.write("**Generated Beat Loop:**")
+                    st.audio(beat_path, format="audio/wav")
+
+                    # Provide a download option for the beat loop
+                    st.download_button(
+                        label="Download Beat Loop",
+                        data=open(beat_path, "rb").read(),
+                        file_name="beat_loop.wav",
+                        mime="audio/wav",
+                    )
                 else:
                     st.error(
                         f"Failed to transcribe audio: {response.status_code} {response.text}"
