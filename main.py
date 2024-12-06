@@ -88,27 +88,46 @@ def process_audio(api_key, audio_file):
                     st.error("The transcription response did not contain segments or text. Please try again.")
                     return
 
-                # Create a beat loop using samples
+                # Allow user to customize and add effects to word slices
+                effects_applied = []
+                st.write("### Customize Slices")
+                for i, word_slice in enumerate(word_slices):
+                    st.write(f"**Slice {i + 1}:**")
+                    apply_reverse = st.checkbox(f"Reverse Slice {i + 1}", key=f"reverse_{i}")
+                    apply_speedup = st.checkbox(f"Speed Up Slice {i + 1}", key=f"speedup_{i}")
+                    apply_slowdown = st.checkbox(f"Slow Down Slice {i + 1}", key=f"slowdown_{i}")
+
+                    # Apply effects
+                    if apply_reverse:
+                        word_slice = word_slice.reverse()
+                    if apply_speedup:
+                        word_slice = word_slice.speedup(playback_speed=1.5)
+                    if apply_slowdown:
+                        word_slice = word_slice.speedup(playback_speed=0.75)
+
+                    effects_applied.append(word_slice)
+
+                # Create a beat loop using customized samples
                 beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
                 for i in range(16):  # Add 16 samples
-                    sample = choice(word_slices)
+                    sample = choice(effects_applied)
                     start_time = int((i / 16) * 4000)
                     beat_loop = beat_loop.overlay(sample, position=start_time)
 
-                # Export the generated beat loop
-                beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                beat_loop.export(beat_path, format="wav")
+                # Export the customized beat loop
+                customized_beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+                beat_loop.export(customized_beat_path, format="wav")
 
                 # Display results
-                st.success("Transcription and beat slicing completed!")
-                st.write("**Generated Beat Loop:**")
-                st.audio(beat_path, format="audio/wav")
+                st.success("Customization and beat slicing completed!")
+                st.write("**Customized Beat Loop:**")
+                st.audio(customized_beat_path, format="audio/wav")
 
-                # Provide a download option for the beat loop
+                # Provide a download option for the customized beat loop
                 st.download_button(
-                    label="Download Beat Loop",
-                    data=open(beat_path, "rb").read(),
-                    file_name="beat_loop.wav",
+                    label="Download Customized Beat Loop",
+                    data=open(customized_beat_path, "rb").read(),
+                    file_name="customized_beat_loop.wav",
                     mime="audio/wav",
                 )
             else:
