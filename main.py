@@ -32,12 +32,12 @@ def process_audio(api_key, audio_file):
     # Transcribe audio using OpenAI Whisper API
     try:
         with st.spinner("Transcribing and slicing the audio..."):
-            with open(processed_audio_path, "rb") as audio:
+            with open(processed_audio_path, "rb") as audio_file:
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                 }
                 files = {
-                    "file": audio,
+                    "file": audio_file,
                 }
                 data = {
                     "model": "whisper-1",  # Specify the Whisper model
