@@ -37,10 +37,14 @@ else:
                     files = {
                         "file": audio,
                     }
+                    data = {
+                        "model": "whisper-1",  # Specify the Whisper model
+                    }
                     response = requests.post(
                         "https://api.openai.com/v1/audio/transcriptions",
                         headers=headers,
                         files=files,
+                        data=data,
                     )
                 if response.status_code == 200:
                     transcript = response.json()
