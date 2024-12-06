@@ -3,10 +3,12 @@ import requests
 import tempfile
 import json
 from pydub import AudioSegment
-from pydub.playback import play
-from pydub.silence import detect_nonsilent
+from pydub.generators import Sine
 from random import choice
 import numpy as np
+from matplotlib import pyplot as plt
+import audioread
+import librosa.display
 
 # Streamlit app title
 st.title("Beat Slicing App")
@@ -18,6 +20,17 @@ api_key = st.text_input(
     placeholder="Enter your API key here...",
 )
 
+def plot_waveform(audio_file):
+    # Plot audio waveform
+    with audioread.audio_open(audio_file.name) as f:
+        y, sr = librosa.load(f.name, sr=None)
+    fig, ax = plt.subplots()
+    librosa.display.waveshow(y, sr=sr, ax=ax)
+    ax.set_title("Waveform")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Amplitude")
+    st.pyplot(fig)
+
 def process_audio(api_key, audio_file):
     # Save the audio file temporarily for processing
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
@@ -28,6 +41,10 @@ def process_audio(api_key, audio_file):
     processed_audio_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
     audio = AudioSegment.from_file(temp_audio_path)
     audio.export(processed_audio_path, format="wav")
+
+    # Display waveform
+    st.write("### Original Audio Waveform")
+    plot_waveform(temp_audio)
 
     # Transcribe audio using OpenAI Whisper API
     try:
@@ -95,7 +112,9 @@ def process_audio(api_key, audio_file):
                     st.write(f"**Slice {i + 1}:**")
                     gain = st.slider(f"Gain (dB) for Slice {i + 1}", -20.0, 20.0, 0.0, key=f"gain_{i}")
                     pan = st.slider(f"Pan (-1.0 to 1.0) for Slice {i + 1}", -1.0, 1.0, 0.0, key=f"pan_{i}")
-                    reverb = st.checkbox(f"Apply Reverb to Slice {i + 1}", key=f"reverb_{i}")
+                    pitch = st.slider(f"Pitch Shift (semitones) for Slice {i + 1}", -12, 12, 0, key=f"pitch_{i}")
+                    reverse = st.checkbox(f"Reverse Slice {i + 1}", key=f"reverse_{i}")
+                    delay = st.slider(f"Delay (ms) for Slice {i + 1}", 0, 500, 0, key=f"delay_{i}")
 
                     # Apply gain
                     word_slice = word_slice + gain
@@ -110,12 +129,31 @@ def process_audio(api_key, audio_file):
                             right = right + int(pan * 10)
                         word_slice = AudioSegment.from_mono_audiosegments(left, right)
 
-                    # Apply reverb (simulate by overlaying a delayed version of the slice)
-                    if reverb:
-                        delay = word_slice - 10  # Create a faint delay effect
-                        word_slice = word_slice.overlay(delay, position=50)
+                    # Apply pitch shift (simulate by time stretch and pitch change)
+                    if pitch != 0:
+                        speed = 2 ** (pitch / 12.0)
+                        word_slice = word_slice._spawn(word_slice.raw_data, overrides={"frame_rate": int(word_slice.frame_rate * speed)})
+                        word_slice = word_slice.set_frame_rate(audio.frame_rate)
+
+                    # Apply reverse
+                    if reverse:
+                        word_slice = word_slice.reverse()
+
+                    # Apply delay (simulate by overlaying with silence)
+                    if delay > 0:
+                        delayed = AudioSegment.silent(duration=delay) + word_slice
+                        word_slice = delayed
 
                     effects_applied.append(word_slice)
+
+                # Master gate option
+                master_gate = st.checkbox("Enable Master Gate (One sound at a time)")
+                if master_gate:
+                    gated_effects = []
+                    for slice in effects_applied:
+                        silence = AudioSegment.silent(duration=4000)
+                        gated_effects.append(silence.overlay(slice))
+                    effects_applied = gated_effects
 
                 # Create a beat loop using customized samples
                 beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
