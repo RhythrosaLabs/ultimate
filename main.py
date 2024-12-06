@@ -88,22 +88,32 @@ def process_audio(api_key, audio_file):
                     st.error("The transcription response did not contain segments or text. Please try again.")
                     return
 
-                # Allow user to customize and add effects to word slices
+                # Allow user to customize and add DAW-like effects to word slices
                 effects_applied = []
                 st.write("### Customize Slices")
                 for i, word_slice in enumerate(word_slices):
                     st.write(f"**Slice {i + 1}:**")
-                    apply_reverse = st.checkbox(f"Reverse Slice {i + 1}", key=f"reverse_{i}")
-                    apply_speedup = st.checkbox(f"Speed Up Slice {i + 1}", key=f"speedup_{i}")
-                    apply_slowdown = st.checkbox(f"Slow Down Slice {i + 1}", key=f"slowdown_{i}")
+                    gain = st.slider(f"Gain (dB) for Slice {i + 1}", -20.0, 20.0, 0.0, key=f"gain_{i}")
+                    pan = st.slider(f"Pan (-1.0 to 1.0) for Slice {i + 1}", -1.0, 1.0, 0.0, key=f"pan_{i}")
+                    reverb = st.checkbox(f"Apply Reverb to Slice {i + 1}", key=f"reverb_{i}")
 
-                    # Apply effects
-                    if apply_reverse:
-                        word_slice = word_slice.reverse()
-                    if apply_speedup:
-                        word_slice = word_slice.speedup(playback_speed=1.5)
-                    if apply_slowdown:
-                        word_slice = word_slice.speedup(playback_speed=0.75)
+                    # Apply gain
+                    word_slice = word_slice + gain
+
+                    # Apply pan (simulate by adjusting channels)
+                    if pan != 0.0:
+                        left = word_slice.split_to_mono()[0]
+                        right = word_slice.split_to_mono()[1]
+                        if pan < 0:
+                            left = left + int(abs(pan) * 10)
+                        elif pan > 0:
+                            right = right + int(pan * 10)
+                        word_slice = AudioSegment.from_mono_audiosegments(left, right)
+
+                    # Apply reverb (simulate by overlaying a delayed version of the slice)
+                    if reverb:
+                        delay = word_slice - 10  # Create a faint delay effect
+                        word_slice = word_slice.overlay(delay, position=50)
 
                     effects_applied.append(word_slice)
 
