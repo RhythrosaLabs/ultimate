@@ -33,10 +33,15 @@ else:
             temp_audio.write(audio_file.read())
             temp_audio_path = temp_audio.name
 
+        # Ensure audio is properly encoded before sending to the API
+        processed_audio_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+        audio = AudioSegment.from_file(temp_audio_path)
+        audio.export(processed_audio_path, format="wav")
+
         # Transcribe audio using OpenAI Whisper API
         try:
             with st.spinner("Transcribing and slicing the audio..."):
-                with open(temp_audio_path, "rb") as audio:
+                with open(processed_audio_path, "rb") as audio:
                     headers = {
                         "Authorization": f"Bearer {api_key}",
                     }
@@ -55,6 +60,7 @@ else:
 
                 if response.status_code == 200:
                     transcript = response.json()
+                    st.write("API Response:", transcript)  # Debugging output
 
                     if "segments" in transcript:
                         words = transcript["segments"]
@@ -93,8 +99,12 @@ else:
                             file_name="beat_loop.wav",
                             mime="audio/wav",
                         )
+                    elif "text" in transcript:
+                        st.warning("Word-level timestamps are missing. Displaying full transcription instead.")
+                        st.write("**Transcription:**")
+                        st.write(transcript["text"])
                     else:
-                        st.error("The transcription response did not contain segments. Please try again with a clearer audio file.")
+                        st.error("The transcription response did not contain segments or text. Please try again.")
                 else:
                     st.error(
                         f"Failed to transcribe audio: {response.status_code} {response.text}"
