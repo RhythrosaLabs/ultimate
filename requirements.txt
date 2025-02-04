@@ -21,3 +21,4 @@ SpeechRecognition
 streamlit-advanced-audio
 transformers
 langdetect
+gradio
