@@ -1,94 +1,79 @@
 import streamlit as st
+import subprocess
+import time
 import requests
-import tempfile
-from transformers import pipeline
-from langdetect import detect
-import json
-from gradio_client import Client, handle_file
+from gradio_client import Client
 
-# Initialize Gradio Client
+# --------------------- CONFIG --------------------- #
 GRADIO_SERVER_URL = "http://localhost:7788/"
-client = Client(GRADIO_SERVER_URL)
+GRADIO_APP_PATH = "your_gradio_app.py"  # Change this to your actual Gradio app script path
+GRADIO_PORT = 7788
 
-# --------------------- Helper Functions --------------------- #
+# --------------------- HELPER FUNCTIONS --------------------- #
+def is_gradio_running():
+    """Check if Gradio is running on the specified port."""
+    try:
+        response = requests.get(GRADIO_SERVER_URL, timeout=3)
+        return response.status_code == 200
+    except requests.ConnectionError:
+        return False
 
-def run_gradio_agent(task):
-    """Run an agent using the Gradio API."""
-    result = client.predict(
-        agent_type="custom",
-        llm_provider="openai",
-        llm_model_name="gpt-4o",
-        llm_temperature=1,
-        llm_base_url="",
-        llm_api_key=api_key,  # Using user-provided API key
-        use_own_browser=False,
-        keep_browser_open=False,
-        headless=False,
-        disable_security=True,
-        window_w=1280,
-        window_h=1100,
-        save_recording_path="./tmp/record_videos",
-        save_agent_history_path="./tmp/agent_history",
-        save_trace_path="./tmp/traces",
-        enable_recording=True,
-        task=task,
-        add_infos="",
-        max_steps=100,
-        use_vision=True,
-        max_actions_per_step=10,
-        tool_calling_method="auto",
-        api_name="/run_with_stream"
-    )
-    return result
+def start_gradio():
+    """Start the Gradio server if it's not running."""
+    if not is_gradio_running():
+        st.warning("Starting Gradio server...")
+        process = subprocess.Popen(
+            ["python", GRADIO_APP_PATH, "--server-name", "0.0.0.0", "--server-port", str(GRADIO_PORT)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        time.sleep(5)  # Give the server time to start
+        if is_gradio_running():
+            st.success("Gradio server started successfully!")
+        else:
+            st.error("Failed to start Gradio server. Check your Gradio script.")
+    else:
+        st.success("Gradio server is already running.")
 
-# --------------------- Streamlit App --------------------- #
+# --------------------- STREAMLIT UI --------------------- #
+st.title("Auto-Configured Gradio Client")
 
-st.title("Rhyme Bot: Speak, and I'll Rhyme!")
+# Start Gradio if not running
+start_gradio()
 
-# Input for OpenAI API key
-api_key = st.text_input(
-    "Enter your OpenAI API key",
-    type="password",
-    placeholder="Enter your API key here...",
-)
-
-if not api_key:
-    st.warning("Please enter your OpenAI API key to proceed.")
+# Connect to Gradio Client
+if is_gradio_running():
+    client = Client(GRADIO_SERVER_URL)
+    
+    # Example API Call (Modify as needed)
+    try:
+        result = client.predict(
+            agent_type="custom",
+            llm_provider="openai",
+            llm_model_name="gpt-4o",
+            llm_temperature=1,
+            llm_base_url="",
+            llm_api_key="your-api-key",  # Replace with your API key
+            use_own_browser=False,
+            keep_browser_open=False,
+            headless=False,
+            disable_security=True,
+            window_w=1280,
+            window_h=1100,
+            save_recording_path="./tmp/record_videos",
+            save_agent_history_path="./tmp/agent_history",
+            save_trace_path="./tmp/traces",
+            enable_recording=True,
+            task="Perform a web search for 'OpenAI'",
+            add_infos="Additional details",
+            max_steps=100,
+            use_vision=True,
+            max_actions_per_step=10,
+            tool_calling_method="auto",
+            api_name="/run_with_stream"
+        )
+        st.write("Gradio API Result:", result)
+    except Exception as e:
+        st.error(f"Failed to communicate with Gradio: {e}")
 else:
-    # Personality Selector
-    personality = st.radio(
-        "Choose a personality for Rhyme Bot:",
-        ("Shakespearean Poet", "Modern Rapper", "Playful Jokester")
-    )
+    st.error("Gradio server is not running.")
 
-    # Record audio
-    audio_file = st.audio_input("Say something, and I'll rhyme!")
-
-    if audio_file:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-            temp_audio.write(audio_file.read())
-            temp_audio_path = temp_audio.name
-
-        # Transcribe audio using OpenAI Whisper API
-        try:
-            with open(temp_audio_path, "rb") as audio:
-                headers = {"Authorization": f"Bearer {api_key}"}
-                files = {"file": audio}
-                data = {"model": "whisper-1"}
-                response = requests.post(
-                    "https://api.openai.com/v1/audio/transcriptions", headers=headers, files=files, data=data
-                )
-            
-            if response.status_code == 200:
-                transcription = response.json()["text"]
-                st.success("Transcription completed!")
-                st.write("**You said:**", transcription)
-
-                # Run Gradio Agent to process the task
-                agent_response = run_gradio_agent(transcription)
-                st.write("**Gradio Agent Response:**", agent_response)
-
-            else:
-                st.error(f"Failed to transcribe audio: {response.status_code} {response.text}")
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
