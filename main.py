@@ -1,15 +1,74 @@
 import streamlit as st
 import requests
 import tempfile
+from transformers import pipeline
+from langdetect import detect
 import json
-from pydub import AudioSegment
-from pydub.playback import play
-from pydub.silence import detect_nonsilent
-from random import choice
-import numpy as np
 
-# Streamlit app title
-st.title("Beat Slicing App")
+# --------------------- Helper Functions --------------------- #
+
+def get_rhyme_suggestions(word):
+    # Placeholder: In a real implementation, call a rhyme API.
+    # Example static suggestions:
+    suggestions = {
+        "day": ["play", "say", "way", "clay", "array"],
+        "amor": ["dolor", "calor", "motor"],
+    }
+    return suggestions.get(word.lower(), ["No suggestions found."])
+
+def generate_ai_image(prompt):
+    # Placeholder for DALL·E image generation call.
+    # If you have an API endpoint:
+    # headers = {"Authorization": f"Bearer {api_key}"}
+    # json_data = {"prompt": prompt, "n":1, "size":"512x512"}
+    # response = requests.post("DALL_E_API_ENDPOINT", headers=headers, json=json_data)
+    # image_url = response.json()["data"][0]["url"]
+    # return image_url
+    return None
+
+def get_background_beat(tone):
+    # Placeholder: return a URL or local file path to an audio file
+    # In reality, you might have different audio files depending on tone.
+    if "uplifting" in tone or "joyful" in tone:
+        return "https://example.com/happy_beat.mp3"
+    elif "encouraging" in tone:
+        return "https://example.com/encouraging_beat.mp3"
+    elif "calm" in tone:
+        return "https://example.com/calm_beat.mp3"
+    else:
+        return "https://example.com/default_beat.mp3"
+
+def construct_system_prompt(personality, mode, language, sentiment_tone):
+    persona_prompts = {
+        "Shakespearean Poet": "Respond with a rhyming couplet in the style of Shakespeare.",
+        "Modern Rapper": "Drop a rap line with a rhyme and rhythm based on the user's input.",
+        "Playful Jokester": "Respond with a rhyming line that's humorous and playful."
+    }
+
+    # Base persona prompt
+    system_prompt = persona_prompts[personality]
+
+    # Multilingual support
+    if language != "en":
+        system_prompt = f"Respond with a rhyme in {language}."
+
+    # Adjust tone based on sentiment
+    system_prompt += f" Respond in a tone that is {sentiment_tone}."
+
+    # Additional mode instructions
+    if mode == "Rhyme Battle":
+        system_prompt += " We are in a rhyme battle. The user and I take turns adding lines that rhyme with each other."
+    elif mode == "Storytelling":
+        system_prompt += " We are creating a longer rhyming story, each of my responses should advance the narrative."
+    elif mode == "Song Lyrics":
+        system_prompt += " We are creating a song. The user provides verses, and I provide a rhyming chorus."
+
+    return system_prompt
+
+
+# --------------------- Streamlit App --------------------- #
+
+st.title("Rhyme Bot: Speak, and I'll Rhyme!")
 
 # Input for OpenAI API key
 api_key = st.text_input(
@@ -18,144 +77,142 @@ api_key = st.text_input(
     placeholder="Enter your API key here...",
 )
 
-def process_audio(api_key, audio_file):
-    # Save the audio file temporarily for processing
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(audio_file.read())
-        temp_audio_path = temp_audio.name
-
-    # Ensure audio is properly encoded before sending to the API
-    processed_audio_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-    audio = AudioSegment.from_file(temp_audio_path)
-    audio.export(processed_audio_path, format="wav")
-
-    # Transcribe audio using OpenAI Whisper API
-    try:
-        with st.spinner("Transcribing and slicing the audio..."):
-            with open(processed_audio_path, "rb") as audio_file:
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                }
-                files = {
-                    "file": audio_file,
-                }
-                data = {
-                    "model": "whisper-1",  # Specify the Whisper model
-                }
-                response = requests.post(
-                    "https://api.openai.com/v1/audio/transcriptions",
-                    headers=headers,
-                    files=files,
-                    data=data,
-                )
-
-            if response.status_code == 200:
-                transcript = response.json()
-                st.write("API Response:", transcript)  # Debugging output
-
-                if "segments" in transcript:
-                    words = transcript["segments"]
-
-                    # Load the audio file into pydub for slicing
-                    audio = AudioSegment.from_file(temp_audio_path)
-                    word_slices = []
-
-                    # Slice the audio based on word timestamps
-                    for segment in words:
-                        start_ms = int(segment["start"] * 1000)
-                        end_ms = int(segment["end"] * 1000)
-                        word_audio = audio[start_ms:end_ms]
-                        word_slices.append(word_audio)
-
-                elif "text" in transcript:
-                    st.warning("Word-level timestamps are missing. Estimating word positions.")
-
-                    # Estimate word durations
-                    words = transcript["text"].split()
-                    num_words = len(words)
-                    total_duration = len(audio)
-                    word_duration = total_duration // num_words
-
-                    # Slice the audio into estimated word chunks
-                    word_slices = []
-                    for i, word in enumerate(words):
-                        start_ms = i * word_duration
-                        end_ms = start_ms + word_duration
-                        word_audio = audio[start_ms:end_ms]
-                        word_slices.append(word_audio)
-
-                else:
-                    st.error("The transcription response did not contain segments or text. Please try again.")
-                    return
-
-                # Allow user to customize and add DAW-like effects to word slices
-                effects_applied = []
-                st.write("### Customize Slices")
-                for i, word_slice in enumerate(word_slices):
-                    st.write(f"**Slice {i + 1}:**")
-                    gain = st.slider(f"Gain (dB) for Slice {i + 1}", -20.0, 20.0, 0.0, key=f"gain_{i}")
-                    pan = st.slider(f"Pan (-1.0 to 1.0) for Slice {i + 1}", -1.0, 1.0, 0.0, key=f"pan_{i}")
-                    reverb = st.checkbox(f"Apply Reverb to Slice {i + 1}", key=f"reverb_{i}")
-
-                    # Apply gain
-                    word_slice = word_slice + gain
-
-                    # Apply pan (simulate by adjusting channels)
-                    if pan != 0.0:
-                        left = word_slice.split_to_mono()[0]
-                        right = word_slice.split_to_mono()[1]
-                        if pan < 0:
-                            left = left + int(abs(pan) * 10)
-                        elif pan > 0:
-                            right = right + int(pan * 10)
-                        word_slice = AudioSegment.from_mono_audiosegments(left, right)
-
-                    # Apply reverb (simulate by overlaying a delayed version of the slice)
-                    if reverb:
-                        delay = word_slice - 10  # Create a faint delay effect
-                        word_slice = word_slice.overlay(delay, position=50)
-
-                    effects_applied.append(word_slice)
-
-                # Create a beat loop using customized samples
-                beat_loop = AudioSegment.silent(duration=4000)  # 4 seconds base loop
-                for i in range(16):  # Add 16 samples
-                    sample = choice(effects_applied)
-                    start_time = int((i / 16) * 4000)
-                    beat_loop = beat_loop.overlay(sample, position=start_time)
-
-                # Export the customized beat loop
-                customized_beat_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                beat_loop.export(customized_beat_path, format="wav")
-
-                # Display results
-                st.success("Customization and beat slicing completed!")
-                st.write("**Customized Beat Loop:**")
-                st.audio(customized_beat_path, format="audio/wav")
-
-                # Provide a download option for the customized beat loop
-                st.download_button(
-                    label="Download Customized Beat Loop",
-                    data=open(customized_beat_path, "rb").read(),
-                    file_name="customized_beat_loop.wav",
-                    mime="audio/wav",
-                )
-            else:
-                st.error(
-                    f"Failed to transcribe audio: {response.status_code} {response.text}"
-                )
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
-
 if not api_key:
     st.warning("Please enter your OpenAI API key to proceed.")
 else:
-    # Record audio using Streamlit's audio_input widget
-    audio_file = st.audio_input("Record your voice")
+    # Personality Selector
+    personality = st.radio(
+        "Choose a personality for Rhyme Bot:",
+        ("Shakespearean Poet", "Modern Rapper", "Playful Jokester")
+    )
+
+    # Advanced Features
+    mode = st.selectbox(
+        "Select mode:",
+        ("Normal", "Rhyme Battle", "Storytelling", "Song Lyrics")
+    )
+
+    # Educational Features Toggle
+    show_education = st.checkbox("Show Rhyme Tutorials & Word Suggestions")
+
+    # Record audio
+    audio_file = st.audio_input("Say something, and I'll rhyme!")
 
     if audio_file:
-        # Display the recorded/uploaded audio for playback
+        # Display the recorded audio for playback
         st.audio(audio_file, format="audio/wav")
 
-        # Process the audio
-        process_audio(api_key, audio_file)
+        # Save the audio file temporarily for processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            temp_audio.write(audio_file.read())
+            temp_audio_path = temp_audio.name
+
+        # Transcribe audio using OpenAI Whisper API
+        try:
+            with st.spinner("Transcribing your voice..."):
+                with open(temp_audio_path, "rb") as audio:
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                    }
+                    files = {
+                        "file": audio,
+                    }
+                    data = {
+                        "model": "whisper-1",
+                    }
+                    response = requests.post(
+                        "https://api.openai.com/v1/audio/transcriptions",
+                        headers=headers,
+                        files=files,
+                        data=data,
+                    )
+                if response.status_code == 200:
+                    transcription = response.json()["text"]
+                    st.success("Transcription completed!")
+                    st.write("**You said:**")
+                    st.write(transcription)
+
+                    # Language Detection
+                    language = detect(transcription)
+
+                    # Sentiment Analysis
+                    sentiment_analyzer = pipeline("sentiment-analysis")
+                    sentiment = sentiment_analyzer(transcription)[0]["label"].upper()
+
+                    # Determine tone based on sentiment
+                    if sentiment == "NEGATIVE":
+                        tone = "uplifting and encouraging"
+                    elif sentiment == "POSITIVE":
+                        tone = "joyful and celebratory"
+                    else:
+                        tone = "neutral and calm"
+
+                    # Construct dynamic system prompt
+                    system_prompt = construct_system_prompt(personality, mode, language, tone)
+
+                    # Generate a rhyming response using GPT Chat API
+                    with st.spinner("Let me rhyme..."):
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        }
+                        chat_data = {
+                            "model": "gpt-4",
+                            "messages": [
+                                {
+                                    "role": "system",
+                                    "content": system_prompt,
+                                },
+                                {
+                                    "role": "user",
+                                    "content": transcription,
+                                },
+                            ],
+                            "temperature": 0.8,
+                        }
+                        response = requests.post(
+                            "https://api.openai.com/v1/chat/completions",
+                            headers=headers,
+                            json=chat_data,
+                        )
+                        if response.status_code == 200:
+                            rhyming_line = response.json()["choices"][0]["message"]["content"].strip()
+                            st.write("**Rhyme Bot says:**")
+                            
+                            # Display rhyme with creative typography (placeholder)
+                            # In practice, you could use st.markdown with custom CSS or images.
+                            st.markdown(f"<h2 style='font-family:serif; color:#3A3A3A;'>{rhyming_line}</h2>", unsafe_allow_html=True)
+                            
+                            # Add background beat (if any)
+                            beat_url = get_background_beat(tone)
+                            if beat_url:
+                                st.audio(beat_url, format="audio/mp3")
+
+                            # AI-generated image based on the rhyme content (if available)
+                            # For example, if user said something about a "sunny day":
+                            if "sun" in transcription.lower():
+                                image_prompt = "A bright sunny landscape with vibrant colors"
+                                image_url = generate_ai_image(image_prompt)
+                                if image_url:
+                                    st.image(image_url, caption="AI-generated illustration")
+                            
+                            # Educational Features
+                            if show_education:
+                                st.write("**Rhyme Tutorial:**")
+                                st.write("A common rhyme scheme is AABB, where the first two lines rhyme and the next two lines rhyme. For example:\nLine 1 (A) and Line 2 (A) rhyme.\nLine 3 (B) and Line 4 (B) rhyme.")
+                                # Suggest rhymes for a word if the user wants
+                                if transcription:
+                                    last_word = transcription.strip().split()[-1]
+                                    suggestions = get_rhyme_suggestions(last_word)
+                                    st.write(f"**Word Suggestions for '{last_word}':**", suggestions)
+
+                        else:
+                            st.error(
+                                f"Failed to generate rhyme: {response.status_code} {response.text}"
+                            )
+                else:
+                    st.error(
+                        f"Failed to transcribe audio: {response.status_code} {response.text}"
+                    )
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
