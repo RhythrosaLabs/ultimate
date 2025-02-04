@@ -1,79 +1,36 @@
 import streamlit as st
-import subprocess
-import time
 import requests
-from gradio_client import Client
+import json
 
-# --------------------- CONFIG --------------------- #
-GRADIO_SERVER_URL = "http://localhost:7788/"
-GRADIO_APP_PATH = "your_gradio_app.py"  # Change this to your actual Gradio app script path
-GRADIO_PORT = 7788
+# Gradio backend URL
+GRADIO_API_URL = "http://localhost:7788/update_settings"
 
-# --------------------- HELPER FUNCTIONS --------------------- #
-def is_gradio_running():
-    """Check if Gradio is running on the specified port."""
-    try:
-        response = requests.get(GRADIO_SERVER_URL, timeout=3)
-        return response.status_code == 200
-    except requests.ConnectionError:
-        return False
+st.title("Dynamic Browser Automation Settings")
 
-def start_gradio():
-    """Start the Gradio server if it's not running."""
-    if not is_gradio_running():
-        st.warning("Starting Gradio server...")
-        process = subprocess.Popen(
-            ["python", GRADIO_APP_PATH, "--server-name", "0.0.0.0", "--server-port", str(GRADIO_PORT)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        time.sleep(5)  # Give the server time to start
-        if is_gradio_running():
-            st.success("Gradio server started successfully!")
-        else:
-            st.error("Failed to start Gradio server. Check your Gradio script.")
+# User-adjustable parameters
+timeout = st.slider("Timeout (seconds)", 1, 60, 10)
+resolution = st.selectbox("Screen Resolution", ["1920x1080", "1280x720", "1024x768"])
+headless = st.checkbox("Run Browser in Headless Mode", True)
+auto_scroll = st.checkbox("Enable Auto Scrolling", False)
+custom_script = st.text_area("Custom JavaScript to Inject", "")
+
+# Create a settings dictionary
+settings = {
+    "timeout": timeout,
+    "resolution": resolution,
+    "headless": headless,
+    "auto_scroll": auto_scroll,
+    "custom_script": custom_script
+}
+
+# Send settings to Gradio backend
+if st.button("Update Settings"):
+    response = requests.post(GRADIO_API_URL, json=settings)
+    if response.status_code == 200:
+        st.success("Settings updated successfully!")
     else:
-        st.success("Gradio server is already running.")
+        st.error("Failed to update settings.")
 
-# --------------------- STREAMLIT UI --------------------- #
-st.title("Auto-Configured Gradio Client")
-
-# Start Gradio if not running
-start_gradio()
-
-# Connect to Gradio Client
-if is_gradio_running():
-    client = Client(GRADIO_SERVER_URL)
-    
-    # Example API Call (Modify as needed)
-    try:
-        result = client.predict(
-            agent_type="custom",
-            llm_provider="openai",
-            llm_model_name="gpt-4o",
-            llm_temperature=1,
-            llm_base_url="",
-            llm_api_key="your-api-key",  # Replace with your API key
-            use_own_browser=False,
-            keep_browser_open=False,
-            headless=False,
-            disable_security=True,
-            window_w=1280,
-            window_h=1100,
-            save_recording_path="./tmp/record_videos",
-            save_agent_history_path="./tmp/agent_history",
-            save_trace_path="./tmp/traces",
-            enable_recording=True,
-            task="Perform a web search for 'OpenAI'",
-            add_infos="Additional details",
-            max_steps=100,
-            use_vision=True,
-            max_actions_per_step=10,
-            tool_calling_method="auto",
-            api_name="/run_with_stream"
-        )
-        st.write("Gradio API Result:", result)
-    except Exception as e:
-        st.error(f"Failed to communicate with Gradio: {e}")
-else:
-    st.error("Gradio server is not running.")
-
+# Display current settings
+st.subheader("Current Settings")
+st.json(settings)
