@@ -12,3 +12,8 @@ Welcome to the **Industrial Noise Generator Pro Max with Variations**! This app 
 **Get started by adjusting the parameters in the sidebar and click "Generate Noise" to create your samples!**
 
 Visit the app: https://ultimate.streamlit.app
+
+
+## Support
+
+If you find this useful, consider supporting via [PayPal](https://paypal.me/noodlebake)
